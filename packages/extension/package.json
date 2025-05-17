@@ -2,16 +2,20 @@
   "name": "vscode-as-mcp-server",
   "displayName": "VSCode as MCP Server",
   "description": "Expose VSCode features such as file viewing and editing as MCP, enabling the LLM to access these functionalities.",
-  "publisher": "acomagu",
+  "publisher": "saika",
   "version": "0.0.25",
   "type": "commonjs",
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.98.0"
+    "vscode": "^1.95.0"
   },
   "activationEvents": [
     "onStartupFinished"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saikaNya/vscode-as-mcp-server"
+  },
   "contributes": {
     "commands": [
       {
@@ -78,7 +82,7 @@
     "@types/node": "~22.13.10",
     "@types/pdf-parse": "^1.1.4",
     "@types/sinon": "^17.0.4",
-    "@types/vscode": "^1.98.0",
+    "@types/vscode": "1.95.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.3.2",
