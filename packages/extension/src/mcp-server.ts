@@ -7,11 +7,11 @@ import * as vscode from 'vscode';
 import { AnyZodObject, z, ZodRawShape } from 'zod';
 import { zodToJsonSchema } from "zod-to-json-schema";
 import packageJson from '../package.json';
-import { listDirectorySchema, listDirectoryTool } from './tools/list_directory';
 import { registerExternalTools } from './tools/register_external_tools';
-
-export const extensionName = 'vscode-mcp-server';
-export const extensionDisplayName = 'VSCode MCP Server';
+import { searchJavaTypesSchema, searchJavaTypesTool } from './tools/search_java_types';
+import { getSourceCodeByFQNSchema, getSourceCodeByFQNTool } from './tools/get_source_code_by_fqn';
+export const extensionName = 'mcp-server-for-java';
+export const extensionDisplayName = 'MCP Server for Java';
 
 interface RegisteredTool {
   description?: string;
@@ -177,17 +177,17 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
 
 function registerTools(mcpServer: ToolRegistry) {
 
-  // Register list directory tool
-  mcpServer.tool(
-    'list_directory',
+   // Register the "searchJavaTypes" tool
+   mcpServer.tool(
+    'searchJavaTypes',
     dedent`
-      List directory contents in a tree format, respecting .gitignore patterns.
-      Shows files and directories with proper indentation and icons.
-      Useful for exploring workspace structure while excluding ignored files.
+      search for Java types (classes, enums, and interfaces) by their name or partial name. 
+      The search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. 
+      The result will return a list of fully qualified names of all matching Java types.
     `.trim(),
-    listDirectorySchema.shape,
-    async (params) => {
-      const result = await listDirectoryTool(params);
+    searchJavaTypesSchema.shape,
+    async (params) => {   
+      const result = await searchJavaTypesTool(params);
       return {
         content: result.content.map(item => ({
           ...item,
@@ -198,6 +198,25 @@ function registerTools(mcpServer: ToolRegistry) {
     }
   );
 
+  // Register the "getSourceCodeByFQN" tool
+  mcpServer.tool(
+    'getSourceCodeByFQN',
+    dedent`
+      Retrieves the source code definition of a Java type (class, enum, or interface) by its fully qualified name (FQN).
+      The search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. 
+    `.trim(),
+    getSourceCodeByFQNSchema.shape,
+    async (params) => {   
+      const result = await getSourceCodeByFQNTool(params);
+      return {
+        content: result.content.map(item => ({
+          ...item,
+          type: 'text' as const,
+        })),
+        isError: result.isError,
+      };
+    }
+  );
 
   // Register all external tools
   registerExternalTools(mcpServer);

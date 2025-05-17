@@ -1,9 +1,9 @@
 {
-  "name": "vscode-as-mcp-server",
-  "displayName": "VSCode as MCP Server",
+  "name": "mcp-server-for-java",
+  "displayName": "MCP Server for Java",
   "description": "Expose VSCode features such as file viewing and editing as MCP, enabling the LLM to access these functionalities.",
   "publisher": "saika",
-  "version": "0.0.25",
+  "version": "0.0.1",
   "type": "commonjs",
   "icon": "icon.png",
   "engines": {
