@@ -57,6 +57,11 @@
           "type": "boolean",
           "default": false,
           "description": "If true, even commands marked as non-destructive (modifySomething=false) will require user confirmation."
+        },
+        "mcpServer.maxOutputLength": {
+          "type": "number",
+          "default": 70000,
+          "description": "Maximum output length in characters. An error will be reported when Java type source code exceeds this limit."
         }
       }
     }

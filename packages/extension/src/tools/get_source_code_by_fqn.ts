@@ -14,6 +14,10 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
     const fqn = params.fullyQualifiedName;
 
     try {
+        // 获取最大输出字符数配置
+        const config = vscode.workspace.getConfiguration('mcpServer');
+        const maxOutputLength = config.get<number>('maxOutputLength') || 70000;
+
         // 直接使用vscode.workspace.executeWorkspaceSymbolProvider查找符号
         const symbolDetails = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
             'vscode.executeWorkspaceSymbolProvider',
@@ -45,11 +49,24 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
 
         // 获取源代码
         const document = await vscode.workspace.openTextDocument(exactMatch.location.uri);
+        const sourceCode = document.getText();
+        
+        // 检查源代码长度是否超出限制
+        if (sourceCode.length > maxOutputLength) {
+            return {
+                content: [{ 
+                    type: 'text', 
+                    text: `Error: Source code length (${sourceCode.length} characters) exceeds the maximum output length limit (${maxOutputLength} characters). ` 
+                }],
+                isError: true
+            };
+        }
+        
         return {
             content: [{
                 type: 'text',
                 text: `\`\`\`java
-${document.getText()}
+${sourceCode}
 \`\`\``
             }]
         };
