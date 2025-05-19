@@ -1,7 +1,7 @@
 {
   "name": "mcp-server-for-java",
   "displayName": "MCP Server for Java",
-  "description": "Expose VSCode features such as file viewing and editing as MCP, enabling the LLM to access these functionalities.",
+  "description": "Expose VSCode features such as find type or get type definition as MCP, enabling the LLM to access these functionalities.",
   "publisher": "saika",
   "version": "0.0.1",
   "type": "commonjs",
@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/saikaNya/vscode-as-mcp-server"
+    "url": "https://github.com/saikaNya/mcp-server-for-java"
   },
   "contributes": {
     "commands": [
