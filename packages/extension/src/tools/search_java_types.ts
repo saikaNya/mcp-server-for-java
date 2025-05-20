@@ -32,6 +32,7 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
         symbol.location.uri.fsPath.endsWith('.class') ||
         [vscode.SymbolKind.Class, vscode.SymbolKind.Interface, vscode.SymbolKind.Enum].includes(symbol.kind)
       )
+      .filter(symbol => !symbol.name.trim().startsWith('@'))
       .map(symbol => {
         // 尝试从符号容器名称和符号名称构建全限定名
         let fullyQualifiedName = symbol.name;
