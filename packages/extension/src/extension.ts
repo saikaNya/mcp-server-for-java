@@ -3,6 +3,7 @@ import { BidiHttpTransport } from './bidi-http-transport';
 import { registerVSCodeCommands } from './commands';
 import { createMcpServer, extensionDisplayName } from './mcp-server';
 import { DIFF_VIEW_URI_SCHEME } from './utils/DiffViewProvider';
+import { WorkspaceSwitcher } from './tools/workspace_switcher';
 
 // MCP Server のステータスを表示するステータスバーアイテム
 let serverStatusBarItem: vscode.StatusBarItem;
@@ -46,6 +47,9 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // Create the output channel for logging
   const outputChannel = vscode.window.createOutputChannel(extensionDisplayName);
   outputChannel.appendLine(`Activating ${extensionDisplayName}...`);
+
+  // Set global output channel for WorkspaceSwitcher
+  WorkspaceSwitcher.setGlobalOutputChannel(outputChannel);
 
   // Initialize the MCP server instance
   const mcpServer = createMcpServer(outputChannel);

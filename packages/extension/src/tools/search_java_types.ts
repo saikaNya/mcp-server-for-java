@@ -1,8 +1,10 @@
 import * as vscode from "vscode";
 import { z } from "zod";
+import { WorkspaceSwitcher } from "./workspace_switcher";
 
 export const searchJavaTypesSchema = z.object({
-  name: z.string().describe("The name or partial name of the Java types (classes, enums, and interfaces) to search for.")
+  name: z.string().describe("The name or partial name of the Java types (classes, enums, and interfaces) to search for."),
+  workspacePath: z.string().describe("The absolute path of the user's workspace.")
 })
 
 interface SearchJavaTypesResult {
@@ -11,8 +13,26 @@ interface SearchJavaTypesResult {
 }
 
 export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypesSchema>): Promise<SearchJavaTypesResult> {
-  const name = params.name
-  // 搜索依赖包中的类
+  const name = params.name;
+  const requestedWorkspacePath = params.workspacePath;
+  
+  // Check workspace path requirements using basic workspace switcher
+  if (requestedWorkspacePath) {
+    const workspaceSwitcher = WorkspaceSwitcher.getInstance();
+    const workspaceResult = await workspaceSwitcher.handleWorkspaceRequirement(requestedWorkspacePath);
+    
+    if (!workspaceResult.success) {
+      return {
+        content: [{ 
+          type: 'text', 
+          text: workspaceSwitcher.formatWorkspaceError(workspaceResult)
+        }],
+        isError: true
+      };
+    }
+  }
+
+  // Search for classes in dependencies
   try {
     const symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
       'vscode.executeWorkspaceSymbolProvider',
@@ -25,7 +45,7 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
       };
     }
 
-    // 过滤可能的非Java类型并提取全限定名
+    // Filter possible non-Java types and extract fully qualified names
     const javaTypes = symbols
       .filter(symbol =>
         symbol.location.uri.fsPath.endsWith('.java') ||
@@ -34,7 +54,7 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
       )
       .filter(symbol => !symbol.name.trim().startsWith('@'))
       .map(symbol => {
-        // 尝试从符号容器名称和符号名称构建全限定名
+        // Try to build fully qualified name from symbol container name and symbol name
         let fullyQualifiedName = symbol.name;
 
         if(symbol.name.includes('.')){

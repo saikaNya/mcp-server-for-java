@@ -3,7 +3,7 @@
   "displayName": "MCP Server for Java",
   "description": "Expose VSCode features such as find type or get type definition as MCP, enabling the LLM to access these functionalities.",
   "publisher": "saika",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "commonjs",
   "icon": "icon.png",
   "engines": {
@@ -62,6 +62,52 @@
           "type": "number",
           "default": 70000,
           "description": "Maximum output length in characters. An error will be reported when Java type source code exceeds this limit."
+        },
+        "mcpServer.workspace.autoSwitch.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic workspace switching. When workspace mismatch is detected, attempt to switch to target workspace."
+        },
+        "mcpServer.workspace.logging.detailed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable detailed logging for workspace switching operations for debugging purposes."
+        },
+        "mcpServer.workspace.logging.level": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "warn",
+          "description": "Workspace switching log level. info (detailed), warn (warnings only), error (errors only)."
+        },
+        "mcpServer.workspace.switchStrategy": {
+          "type": "string",
+          "enum": [
+            "currentWindow",
+            "newWindow",
+            "handover",
+            "all"
+          ],
+          "default": "all",
+          "description": "Workspace switching strategy. currentWindow (switch in current window), newWindow (open in new window), handover (use handover mechanism), all (try all strategies)."
+        },
+        "mcpServer.workspace.switchTimeout": {
+          "type": "number",
+          "default": 15000,
+          "description": "Workspace switching timeout in milliseconds. How long to wait for workspace switching to complete."
+        },
+        "mcpServer.workspace.verificationRetries": {
+          "type": "number",
+          "default": 5,
+          "description": "Number of verification attempts when checking if workspace switch was successful."
+        },
+        "mcpServer.workspace.verificationDelay": {
+          "type": "number",
+          "default": 3000,
+          "description": "Delay between verification attempts in milliseconds."
         }
       }
     }

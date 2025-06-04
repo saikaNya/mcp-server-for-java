@@ -1,8 +1,10 @@
 import * as vscode from "vscode";
 import { z } from "zod";
+import { WorkspaceSwitcher } from "./workspace_switcher";
 
 export const getSourceCodeByFQNSchema = z.object({
-    fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code.")
+    fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
+    workspacePath: z.string().describe("The absolute path of the user's workspace.")
 })
 
 interface GetSourceCodeByFQNResult {
@@ -12,13 +14,30 @@ interface GetSourceCodeByFQNResult {
 
 export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCodeByFQNSchema>): Promise<GetSourceCodeByFQNResult> {
     const fqn = params.fullyQualifiedName;
+    const requestedWorkspacePath = params.workspacePath;
+
+    // Check workspace path requirements using basic workspace switcher
+    if (requestedWorkspacePath) {
+        const workspaceSwitcher = WorkspaceSwitcher.getInstance();
+        const workspaceResult = await workspaceSwitcher.handleWorkspaceRequirement(requestedWorkspacePath);
+        
+        if (!workspaceResult.success) {
+            return {
+                content: [{ 
+                    type: 'text', 
+                    text: workspaceSwitcher.formatWorkspaceError(workspaceResult)
+                }],
+                isError: true
+            };
+        }
+    }
 
     try {
-        // 获取最大输出字符数配置
+        // Get maximum output character configuration
         const config = vscode.workspace.getConfiguration('mcpServer');
         const maxOutputLength = config.get<number>('maxOutputLength') || 70000;
 
-        // 直接使用vscode.workspace.executeWorkspaceSymbolProvider查找符号
+        // Use vscode.workspace.executeWorkspaceSymbolProvider to find symbols directly
         const symbolDetails = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
             'vscode.executeWorkspaceSymbolProvider',
             fqn
@@ -30,7 +49,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             };
         }
 
-        // 找到精确匹配的符号
+        // Find exact match symbol
         const exactMatch = symbolDetails.find(symbol => {
             let symbolFQN = symbol.name;
             if (symbol.name.includes('.')) {
@@ -43,37 +62,32 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
 
         if (!exactMatch) {
             return {
-                content: [{ type: 'text', text: `Could not find exact match for type: ${fqn}` }]
+                content: [{ type: 'text', text: `No exact match found for the fully qualified name: ${fqn}` }]
             };
         }
 
-        // 获取源代码
+        // Get document content where the symbol is located
         const document = await vscode.workspace.openTextDocument(exactMatch.location.uri);
-        const sourceCode = document.getText();
-        
-        // 检查源代码长度是否超出限制
-        if (sourceCode.length > maxOutputLength) {
+        const fullText = document.getText();
+
+        // Check if exceeds maximum output length
+        if (fullText.length > maxOutputLength) {
             return {
                 content: [{ 
                     type: 'text', 
-                    text: `Error: Source code length (${sourceCode.length} characters) exceeds the maximum output length limit (${maxOutputLength} characters). ` 
+                    text: `Source code for ${fqn} is too large (${fullText.length} characters). Maximum allowed is ${maxOutputLength} characters. Please increase the mcpServer.maxOutputLength setting or request a specific method/field.` 
                 }],
                 isError: true
             };
         }
-        
+
         return {
-            content: [{
-                type: 'text',
-                text: `\`\`\`java
-${sourceCode}
-\`\`\``
-            }]
+            content: [{ type: 'text', text: fullText }]
         };
 
     } catch (error) {
         return {
-            content: [{ type: 'text', text: `Error retrieving source code: ${error}` }],
+            content: [{ type: 'text', text: `Error retrieving source code for ${fqn}: ${error}` }],
             isError: true
         };
     }
