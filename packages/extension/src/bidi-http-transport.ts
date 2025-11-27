@@ -3,6 +3,7 @@ import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import * as http from 'node:http';
 import * as vscode from 'vscode';
+import { listWorkspaces, unregisterWorkspace } from './utils/router-table';
 
 export class BidiHttpTransport implements Transport {
   onclose?: () => void;
@@ -30,7 +31,8 @@ export class BidiHttpTransport implements Transport {
 
   constructor(
     readonly listenPort: number,
-    private readonly outputChannel: vscode.OutputChannel
+    private readonly outputChannel: vscode.OutputChannel,
+    private readonly workspacePath?: string
   ) { }
 
   async requestHandover(): Promise<boolean> {
@@ -105,6 +107,32 @@ export class BidiHttpTransport implements Transport {
       };
 
       res.send(response);
+    });
+
+    // Endpoint to get current workspace info
+    app.get('/workspace-info', (_req: express.Request, res: express.Response) => {
+      this.outputChannel.appendLine('Received workspace-info request');
+      res.send({
+        workspace: this.workspacePath,
+        port: this.listenPort,
+        pid: process.pid,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Endpoint to list all registered workspaces
+    app.get('/list-workspaces', async (_req: express.Request, res: express.Response) => {
+      this.outputChannel.appendLine('Received list-workspaces request');
+      try {
+        const workspaces = await listWorkspaces();
+        res.send({
+          workspaces,
+          currentWorkspace: this.workspacePath,
+          currentPort: this.listenPort
+        });
+      } catch (err) {
+        res.status(500).send({ error: String(err) });
+      }
     });
 
     // Endpoint to handle handover requests
@@ -220,6 +248,15 @@ export class BidiHttpTransport implements Transport {
       this.outputChannel.appendLine('Closing server');
       this.httpServer.close();
       this.httpServer = undefined;
+    }
+    // Unregister workspace from router table
+    if (this.workspacePath) {
+      try {
+        await unregisterWorkspace(this.workspacePath);
+        this.outputChannel.appendLine(`Unregistered workspace ${this.workspacePath} from router table`);
+      } catch (err) {
+        this.outputChannel.appendLine(`Failed to unregister workspace: ${err}`);
+      }
     }
   }
 }

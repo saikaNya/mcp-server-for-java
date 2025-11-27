@@ -7,6 +7,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { initialTools } from './initial_tools.js';
+import { getPortForWorkspace, getDefaultPort, listWorkspaces, normalizeWorkspacePath } from './router-table.js';
 
 const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
 const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
@@ -15,7 +16,10 @@ const RETRY_INTERVAL = 1000; // 1 second
 
 class MCPRelay {
   private mcpServer: McpServer;
-  constructor(readonly serverUrl: string) {
+  private defaultServerUrl: string;
+  
+  constructor(readonly baseServerUrl: string) {
+    this.defaultServerUrl = baseServerUrl;
     this.mcpServer = new McpServer({
       name: 'vscode-as-mcp',
       version: '0.0.1',
@@ -28,8 +32,10 @@ class MCPRelay {
     // Periodically call listTools to update the tools list
     setInterval(async () => {
       let tools: any[];
+      let serverUrl: string;
       try {
-        const resp = await this.requestWithRetry(this.serverUrl, JSON.stringify({
+        serverUrl = await this.getServerUrl();
+        const resp = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/list',
           params: {},
@@ -51,7 +57,7 @@ class MCPRelay {
 
       // Notify to user that tools have been updated and restart the client
       try {
-        await this.requestWithRetry(this.serverUrl + '/notify-tools-updated', '');
+        await this.requestWithRetry(serverUrl + '/notify-tools-updated', '');
       } catch (err) {
         console.error(`Failed to notify tools updated: ${(err as Error).message}`);
       }
@@ -68,7 +74,8 @@ class MCPRelay {
 
       let tools: any[];
       try {
-        const response = await this.requestWithRetry(this.serverUrl, JSON.stringify({
+        const serverUrl = await this.getServerUrl();
+        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/list',
           params: request.params,
@@ -93,7 +100,15 @@ class MCPRelay {
 
     this.mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
       try {
-        const response = await this.requestWithRetry(this.serverUrl, JSON.stringify({
+        // Extract workspace parameter from tool arguments
+        const args = request.params.arguments as Record<string, unknown> | undefined;
+        const workspace = args?.workspace as string | undefined;
+        
+        // Get server URL based on workspace parameter
+        const serverUrl = await this.getServerUrl(workspace);
+        console.error(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
+        
+        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: request.method,
           params: request.params,
@@ -112,6 +127,42 @@ class MCPRelay {
         };
       }
     });
+  }
+
+  /**
+   * Gets the server URL for a specific workspace or returns the default URL.
+   * @param workspace Optional workspace path to route to
+   * @returns The server URL for the workspace or the default URL
+   */
+  async getServerUrl(workspace?: string): Promise<string> {
+    if (!workspace) {
+      return this.defaultServerUrl;
+    }
+
+    try {
+      const port = await getPortForWorkspace(workspace);
+      if (port) {
+        return `http://localhost:${port}`;
+      }
+      
+      // Try to find a matching workspace by partial path match
+      const workspaces = await listWorkspaces();
+      const normalizedInput = normalizeWorkspacePath(workspace);
+      
+      for (const entry of workspaces) {
+        const normalizedEntry = normalizeWorkspacePath(entry.workspace);
+        // Check if input contains the workspace path or vice versa
+        if (normalizedEntry.includes(normalizedInput) || normalizedInput.includes(normalizedEntry)) {
+          return `http://localhost:${entry.port}`;
+        }
+      }
+      
+      console.error(`No server found for workspace: ${workspace}, using default`);
+      return this.defaultServerUrl;
+    } catch (err) {
+      console.error(`Error getting server URL for workspace: ${(err as Error).message}`);
+      return this.defaultServerUrl;
+    }
   }
   // キャッシュディレクトリの初期化
   async initCacheDir(): Promise<void> {

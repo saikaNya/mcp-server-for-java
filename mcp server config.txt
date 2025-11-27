@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "java": {
+      "command": "node",
+      "args": ["D:\\githubProject\\vscodeProject\\mcp-server-for-java\\packages\\relay\\dist\\index.js"]
+    }
+  }
+}
+
+
+{
+    "mcpServers": {
+        "vscode-java": {
+            "url": "http://localhost:60100"
+        }
+    }
+}

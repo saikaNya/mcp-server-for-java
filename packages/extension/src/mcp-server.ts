@@ -1,13 +1,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol';
-import { CallToolRequestSchema, CallToolResult, ErrorCode, ListResourcesRequestSchema, ListToolsRequestSchema, ListToolsResult, McpError, ReadResourceRequestSchema, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, CallToolResult, ErrorCode, ListToolsRequestSchema, ListToolsResult, McpError, Tool } from '@modelcontextprotocol/sdk/types.js';
 import dedent from 'dedent';
 import * as vscode from 'vscode';
 import { AnyZodObject, z, ZodRawShape } from 'zod';
 import { zodToJsonSchema } from "zod-to-json-schema";
 import packageJson from '../package.json';
-import { registerExternalTools } from './tools/register_external_tools';
 import { searchJavaTypesSchema, searchJavaTypesTool } from './tools/search_java_types';
 import { getSourceCodeByFQNSchema, getSourceCodeByFQNTool } from './tools/get_source_code_by_fqn';
 export const extensionName = 'mcp-server-for-java';
@@ -160,7 +159,6 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
     version: packageJson.version,
   }, {
     capabilities: {
-      resources: {},
       tools: {},
     },
   });
@@ -169,8 +167,6 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
 
   // Register tools
   registerTools(toolRegistry);
-  // Register resource handlers
-  registerResourceHandlers(mcpServer);
 
   return mcpServer;
 }
@@ -217,65 +213,4 @@ function registerTools(mcpServer: ToolRegistry) {
       };
     }
   );
-
-  // Register all external tools
-  registerExternalTools(mcpServer);
 }
-
-function registerResourceHandlers(mcpServer: McpServer) {
-  mcpServer.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    const documents = vscode.workspace.textDocuments;
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-    return {
-      resources: documents.map((doc) => ({
-        uri: `vscode://${doc.uri.fsPath}`,
-        mimeType: doc.languageId ? `text/${doc.languageId}` : "text/plain",
-        name: `Currently Open in Editor: ${doc.fileName}`,
-        description: dedent`
-          This is one of the currently open files in the editor.
-          Language: ${doc.languageId || 'plain text'}
-          Line count: ${doc.lineCount}
-          Note: This list only shows files that are currently open in the editor.
-          There may be more files in the workspace at ${workspaceRoot || 'the current workspace'}.
-        `.trim(),
-      })),
-    };
-  });
-
-  mcpServer.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const resourceUrl = new URL(request.params.uri);
-    const filePath = resourceUrl.pathname.replace(/^\//, '');
-
-    const documents = vscode.workspace.textDocuments;
-    const document = documents.find(doc => doc.uri.fsPath === filePath);
-
-    if (!document) {
-      throw new Error("File not found or not open in editor");
-    }
-
-    return {
-      contents: [
-        {
-          uri: request.params.uri,
-          mimeType: document.languageId ? `text/${document.languageId}` : "text/plain",
-          text: document.getText(),
-        },
-      ],
-    };
-  });
-}
-
-// interface Tool<Args extends ZodRawShape> {
-//   name: string;
-//   description: string;
-//   paramsSchema: Args;
-//   cb: ToolCallback<Args>;
-// }
-//
-// export class McpServerHelper {
-//   tools: Tool<any>[] = [];
-//   tool<Args extends ZodRawShape>(name: string, description: string, paramsSchema: Args, cb: ToolCallback<Args>) {
-//     this.tools.push({ name, description, paramsSchema, cb });
-//   }
-// }

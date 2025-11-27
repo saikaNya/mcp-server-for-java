@@ -11,7 +11,7 @@ export function registerVSCodeCommands(
   context: vscode.ExtensionContext,
   mcpServer: McpServer,
   outputChannel: vscode.OutputChannel,
-  startServer: (port: number) => Promise<void>,
+  startServer: (port?: number) => Promise<void>,
   transport?: BidiHttpTransport
 ) {
   // テキストエディタのアクションコマンドを登録

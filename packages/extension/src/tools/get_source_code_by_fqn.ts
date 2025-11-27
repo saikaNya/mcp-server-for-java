@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import { z } from "zod";
 
 export const getSourceCodeByFQNSchema = z.object({
-    fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code.")
+    fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
+    workspace: z.string().optional().describe("The absolute path of the workspace to search in. If not provided, or if it matches the current workspace, the action will be performed in the current workspace. Otherwise, an attempt will be made to switch to the specified workspace before proceeding.")
 })
 
 interface GetSourceCodeByFQNResult {

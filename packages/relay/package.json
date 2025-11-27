@@ -1,10 +1,10 @@
 {
-  "name": "vscode-as-mcp-server",
+  "name": "mcp-server-for-java",
   "version": "0.0.14",
-  "description": "VSCode MCP relay that supports multiple servers",
+  "description": "MCP Server for Java - VSCode MCP relay that supports multiple workspaces",
   "main": "dist/index.js",
   "bin": {
-    "vscode-as-mcp-server": "dist/index.js"
+    "mcp-server-for-java": "dist/index.js"
   },
   "publishConfig": {
     "access": "public"
@@ -18,7 +18,9 @@
   "keywords": [
     "vscode",
     "mcp",
-    "relay"
+    "relay",
+    "java",
+    "cursor"
   ],
   "author": "",
   "license": "ISC",
