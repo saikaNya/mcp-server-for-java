@@ -1,30 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as vscode from 'vscode';
 
-export interface ServerState {
-  value: boolean;
-}
-
-import { BidiHttpTransport } from './bidi-http-transport';
-
 export function registerVSCodeCommands(
   context: vscode.ExtensionContext,
   mcpServer: McpServer,
   outputChannel: vscode.OutputChannel,
-  startServer: (port?: number) => Promise<void>,
-  transport?: BidiHttpTransport
+  startServer: (port?: number) => Promise<void>
 ) {
-  // テキストエディタのアクションコマンドを登録
-  context.subscriptions.push(
-    vscode.commands.registerCommand('textEditor.applyChanges', () => {
-      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-      return true;
-    }),
-    vscode.commands.registerCommand('textEditor.cancelChanges', () => {
-      vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-      return false;
-    })
-  );
   // COMMAND PALETTE COMMAND: Stop the MCP Server
   context.subscriptions.push(
     vscode.commands.registerCommand('mcpServer.stopServer', () => {
@@ -53,27 +35,5 @@ export function registerVSCodeCommands(
         vscode.window.showErrorMessage(`Failed to start MCP Server: ${err}`);
       }
     }),
-  );
-
-  // Request handover
-  context.subscriptions.push(
-    vscode.commands.registerCommand('mcpServer.toggleActiveStatus', async () => {
-      if (!transport) {
-        vscode.window.showWarningMessage('MCP Server is not running.');
-        return;
-      }
-
-      try {
-        const success = await transport.requestHandover();
-        if (success) {
-          outputChannel.appendLine('Handover request successful');
-        } else {
-          vscode.window.showErrorMessage('Failed to complete handover request.');
-        }
-      } catch (err) {
-        outputChannel.appendLine(`Error requesting handover: ${err}`);
-        vscode.window.showErrorMessage(`Failed to complete handover request: ${err}`);
-      }
-    })
   );
 }
