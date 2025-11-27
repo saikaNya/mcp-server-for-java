@@ -1,7 +1,7 @@
 // Common workspace property definition for all tools
 const workspaceProperty = {
   "type": "string",
-  "description": "The absolute path of the workspace to execute this tool in. If not provided, or if it matches the current workspace, the tool will be executed in the current workspace. Otherwise, an attempt will be made to switch to the specified workspace before execution."
+  "description": "Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."
 };
 
 export const initialTools = [
@@ -18,7 +18,7 @@ export const initialTools = [
         "workspace": workspaceProperty
       },
       "required": [
-        "name"
+        "name","workspace"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
@@ -37,7 +37,7 @@ export const initialTools = [
         "workspace": workspaceProperty
       },
       "required": [
-        "fullyQualifiedName"
+        "fullyQualifiedName","workspace"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"

@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-for-java",
-  "version": "0.0.14",
+  "version": "0.0.1",
   "description": "MCP Server for Java - VSCode MCP relay that supports multiple workspaces",
   "main": "dist/index.js",
   "bin": {

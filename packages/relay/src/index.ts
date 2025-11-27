@@ -13,6 +13,7 @@ const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
 const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
+const RELAY_VERSION = '0.0.1';
 
 class MCPRelay {
   private mcpServer: McpServer;
@@ -113,7 +114,9 @@ class MCPRelay {
           method: request.method,
           params: request.params,
           id: Math.floor(Math.random() * 1000000),
-        } as JSONRPCRequest));
+        } as JSONRPCRequest), {
+          'X-Relay-Version': RELAY_VERSION,
+        });
         const parsedResponse = response as JSONRPCResponse;
         return parsedResponse.result as any;
       } catch (e) {
@@ -202,7 +205,7 @@ class MCPRelay {
     }
   }
 
-  async requestWithRetry(url: string, body: string): Promise<unknown> {
+  async requestWithRetry(url: string, body: string, extraHeaders?: Record<string, string>): Promise<unknown> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -215,7 +218,8 @@ class MCPRelay {
         const response = await fetch(url, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            ...extraHeaders,
           },
           body: body,
         });

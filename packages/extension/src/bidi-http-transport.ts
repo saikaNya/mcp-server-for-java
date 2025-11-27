@@ -5,6 +5,29 @@ import * as http from 'node:http';
 import * as vscode from 'vscode';
 import { unregisterWorkspace } from './utils/router-table';
 
+const MIN_RELAY_VERSION = '0.0.1';
+const VERSION_WARNING_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown between warnings
+
+/**
+ * Compare two semver version strings.
+ * Returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+ */
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+  
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 < p2) return -1;
+    if (p1 > p2) return 1;
+  }
+  return 0;
+}
+
+// Track last warning time to avoid spamming
+let lastVersionWarningTime = 0;
+
 export class BidiHttpTransport implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
@@ -41,6 +64,25 @@ export class BidiHttpTransport implements Transport {
       this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
       try {
         const message = req.body as JSONRPCMessage;
+
+        // Check relay version for tools/call requests
+        if ('method' in message && message.method === 'tools/call') {
+          const relayVersion = req.headers['x-relay-version'] as string | undefined;
+          if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
+            const now = Date.now();
+            const displayVersion = relayVersion || 'unknown';
+            this.outputChannel.appendLine(`Warning: Relay version ${displayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
+            
+            // Only show warning if cooldown period has passed
+            if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
+              lastVersionWarningTime = now;
+              vscode.window.showWarningMessage(
+                `mcp-server-for-java version is outdated (current: ${displayVersion}, required: >= ${MIN_RELAY_VERSION}). Please update by running: npm install -g mcp-server-for-java@latest`,
+                'OK'
+              );
+            }
+          }
+        }
 
         if (this.onmessage) {
           if ('id' in message) {
