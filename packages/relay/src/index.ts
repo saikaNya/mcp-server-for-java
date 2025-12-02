@@ -125,7 +125,7 @@ class MCPRelay {
           isError: true,
           content: [{
             type: 'text',
-            text: `Failed to communicate with the VSCode as MCP Extension. Please ensure that the VSCode Extension is installed and that "MCP Server" is displayed in the status bar.`,
+            text: `Failed to communicate with the Vsode Mcp Server.`,
           }],
         };
       }
