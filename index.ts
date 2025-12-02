@@ -7,20 +7,15 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { initialTools } from './initial_tools.js';
-import { getPortForWorkspace, getDefaultPort, listWorkspaces, normalizeWorkspacePath } from './router-table.js';
 
 const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
 const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
-const RELAY_VERSION = '0.0.3';
 
 class MCPRelay {
   private mcpServer: McpServer;
-  private defaultServerUrl: string;
-  
-  constructor(readonly baseServerUrl: string) {
-    this.defaultServerUrl = baseServerUrl;
+  constructor(readonly serverUrl: string) {
     this.mcpServer = new McpServer({
       name: 'vscode-as-mcp',
       version: '0.0.1',
@@ -33,10 +28,8 @@ class MCPRelay {
     // Periodically call listTools to update the tools list
     setInterval(async () => {
       let tools: any[];
-      let serverUrl: string;
       try {
-        serverUrl = await this.getServerUrl();
-        const resp = await this.requestWithRetry(serverUrl, JSON.stringify({
+        const resp = await this.requestWithRetry(this.serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/list',
           params: {},
@@ -52,13 +45,13 @@ class MCPRelay {
 
       // Compare the fetched tools with the cached ones
       if (cachedTools && cachedTools.length === tools.length) {
-        console.info('Fetched tools list is the same as the cached one, not updating cache');
+        console.error('Fetched tools list is the same as the cached one, not updating cache');
         return { tools: cachedTools };
       }
 
       // Notify to user that tools have been updated and restart the client
       try {
-        await this.requestWithRetry(serverUrl + '/notify-tools-updated', '');
+        await this.requestWithRetry(this.serverUrl + '/notify-tools-updated', '');
       } catch (err) {
         console.error(`Failed to notify tools updated: ${(err as Error).message}`);
       }
@@ -66,7 +59,7 @@ class MCPRelay {
       try {
         await this.saveToolsCache(tools);
       } catch (cacheErr) {
-        console.info(`Failed to cache tools response: ${(cacheErr as Error).message}`);
+        console.error(`Failed to cache tools response: ${(cacheErr as Error).message}`);
       }
     }, 30000); // every 30 seconds
 
@@ -75,8 +68,7 @@ class MCPRelay {
 
       let tools: any[];
       try {
-        const serverUrl = await this.getServerUrl();
-        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
+        const response = await this.requestWithRetry(this.serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: 'tools/list',
           params: request.params,
@@ -101,22 +93,12 @@ class MCPRelay {
 
     this.mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
       try {
-        // Extract workspace parameter from tool arguments
-        const args = request.params.arguments as Record<string, unknown> | undefined;
-        const workspace = args?.workspace as string | undefined;
-        
-        // Get server URL based on workspace parameter
-        const serverUrl = await this.getServerUrl(workspace);
-        console.info(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
-        
-        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
+        const response = await this.requestWithRetry(this.serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: request.method,
           params: request.params,
           id: Math.floor(Math.random() * 1000000),
-        } as JSONRPCRequest), {
-          'X-Relay-Version': RELAY_VERSION,
-        });
+        } as JSONRPCRequest));
         const parsedResponse = response as JSONRPCResponse;
         return parsedResponse.result as any;
       } catch (e) {
@@ -125,47 +107,11 @@ class MCPRelay {
           isError: true,
           content: [{
             type: 'text',
-            text: `Failed to communicate with the Vsode Mcp Server.`,
+            text: `Failed to communicate with the VSCode as MCP Extension. Please ensure that the VSCode Extension is installed and that "MCP Server" is displayed in the status bar.`,
           }],
         };
       }
     });
-  }
-
-  /**
-   * Gets the server URL for a specific workspace or returns the default URL.
-   * @param workspace Optional workspace path to route to
-   * @returns The server URL for the workspace or the default URL
-   */
-  async getServerUrl(workspace?: string): Promise<string> {
-    if (!workspace) {
-      return this.defaultServerUrl;
-    }
-
-    try {
-      const port = await getPortForWorkspace(workspace);
-      if (port) {
-        return `http://localhost:${port}`;
-      }
-      
-      // Try to find a matching workspace by partial path match
-      const workspaces = await listWorkspaces();
-      const normalizedInput = normalizeWorkspacePath(workspace);
-      
-      for (const entry of workspaces) {
-        const normalizedEntry = normalizeWorkspacePath(entry.workspace);
-        // Check if input contains the workspace path or vice versa
-        if (normalizedEntry.includes(normalizedInput) || normalizedInput.includes(normalizedEntry)) {
-          return `http://localhost:${entry.port}`;
-        }
-      }
-      
-      console.info(`No server found for workspace: ${workspace}, using default`);
-      return this.defaultServerUrl;
-    } catch (err) {
-      console.error(`Error getting server URL for workspace: ${(err as Error).message}`);
-      return this.defaultServerUrl;
-    }
   }
   // キャッシュディレクトリの初期化
   async initCacheDir(): Promise<void> {
@@ -188,7 +134,7 @@ class MCPRelay {
     await this.initCacheDir();
     try {
       await fs.writeFile(TOOLS_CACHE_FILE, JSON.stringify(tools), 'utf8');
-      console.info('Tools list cache saved');
+      console.error('Tools list cache saved');
     } catch (err) {
       console.error(`Failed to save cache: ${(err as Error).message}`);
     }
@@ -205,7 +151,7 @@ class MCPRelay {
     }
   }
 
-  async requestWithRetry(url: string, body: string, extraHeaders?: Record<string, string>): Promise<unknown> {
+  async requestWithRetry(url: string, body: string): Promise<unknown> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -218,8 +164,7 @@ class MCPRelay {
         const response = await fetch(url, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            ...extraHeaders,
+            'Content-Type': 'application/json'
           },
           body: body,
         });
