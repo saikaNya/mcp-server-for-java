@@ -5,7 +5,7 @@ import * as http from 'node:http';
 import * as vscode from 'vscode';
 import { unregisterWorkspace } from './utils/router-table';
 
-const MIN_RELAY_VERSION = '0.0.1';
+const MIN_RELAY_VERSION = '0.0.2';
 const VERSION_WARNING_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown between warnings
 
 /**
@@ -77,9 +77,13 @@ export class BidiHttpTransport implements Transport {
             if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
               lastVersionWarningTime = now;
               vscode.window.showWarningMessage(
-                `mcp-server-for-java version is outdated (current: ${displayVersion}, required: >= ${MIN_RELAY_VERSION}). Please update by running: npm install -g mcp-server-for-java@latest`,
-                'OK'
-              );
+                `vscode-to-mcp-server npm package version is outdated (current: ${displayVersion}, required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see details and resolve the issue.`,
+                'View Extension'
+              ).then(selection => {
+                if (selection === 'View Extension') {
+                  vscode.commands.executeCommand('extension.open', 'saika.mcp-server-for-java');
+                }
+              });
             }
           }
         }
