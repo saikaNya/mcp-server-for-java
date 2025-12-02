@@ -52,7 +52,7 @@ class MCPRelay {
 
       // Compare the fetched tools with the cached ones
       if (cachedTools && cachedTools.length === tools.length) {
-        console.info('Fetched tools list is the same as the cached one, not updating cache');
+        console.error('Fetched tools list is the same as the cached one, not updating cache');
         return { tools: cachedTools };
       }
 
@@ -66,7 +66,7 @@ class MCPRelay {
       try {
         await this.saveToolsCache(tools);
       } catch (cacheErr) {
-        console.info(`Failed to cache tools response: ${(cacheErr as Error).message}`);
+        console.error(`Failed to cache tools response: ${(cacheErr as Error).message}`);
       }
     }, 30000); // every 30 seconds
 
@@ -107,7 +107,7 @@ class MCPRelay {
         
         // Get server URL based on workspace parameter
         const serverUrl = await this.getServerUrl(workspace);
-        console.info(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
+        console.error(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
         
         const response = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
@@ -160,7 +160,7 @@ class MCPRelay {
         }
       }
       
-      console.info(`No server found for workspace: ${workspace}, using default`);
+      console.error(`No server found for workspace: ${workspace}, using default`);
       return this.defaultServerUrl;
     } catch (err) {
       console.error(`Error getting server URL for workspace: ${(err as Error).message}`);
@@ -188,7 +188,7 @@ class MCPRelay {
     await this.initCacheDir();
     try {
       await fs.writeFile(TOOLS_CACHE_FILE, JSON.stringify(tools), 'utf8');
-      console.info('Tools list cache saved');
+      console.error('Tools list cache saved');
     } catch (err) {
       console.error(`Failed to save cache: ${(err as Error).message}`);
     }

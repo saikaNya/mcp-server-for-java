@@ -27,7 +27,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 - **搜索 Java 类型**：在项目、外部依赖和 JDK 中搜索类、接口、枚举
 - **获取源代码**：通过全限定名获取任意可访问类的源码（包括依赖库和 JDK）
 
-![获取类的定义](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/getTypeDefinition_cn.gif)
+![获取类的定义](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/getTypeDefinition_cn.gif)
 
 ## 多工作区支持
 - v0.0.3 之前：通过点击状态栏在多个 VSCode/Cursor 工作区之间切换 MCP 服务器
@@ -62,7 +62,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
     ```
 
 4. 打开一个java项目，并确保项目完全加载完毕
-![项目完全加载完毕](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/envReady.png)
+![项目完全加载完毕](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
 
 ## 提高工具调用率（推荐配置）
 为了让 AI Agent 更主动地调用本插件提供的工具，建议在系统提示词中添加以下内容（如果你没有更好或者更适合自己应用场景的提示词）：
@@ -109,7 +109,7 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
 - **Search Java Types**: Find classes, interfaces, and enums across your project, external dependencies, and JDK
 - **Get Source Code**: Retrieve source code of any accessible class by fully qualified name (including dependency libraries and JDK)
 
-![Get Type Definition](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/getTypeDefinition_eng.gif)
+![Get Type Definition](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/getTypeDefinition_eng.gif)
 
 ## Multi-Workspace Support
 - Before v0.0.3: Switch MCP server between multiple VSCode/Cursor workspaces by clicking the status bar
@@ -144,7 +144,7 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
     ```
 
 4. Open a Java project and make sure the project is fully loaded
-![Project fully loaded](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/envReady.png)
+![Project fully loaded](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
 
 ## Improve Tool Invocation Rate (Recommended Configuration)
 To help AI Agents invoke the tools provided by this extension more proactively, it is recommended to add the following content to your system prompt (if you don't have a better or more suitable prompt for your use case):
