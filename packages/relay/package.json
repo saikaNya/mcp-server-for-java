@@ -1,6 +1,6 @@
 {
   "name": "vscode-to-mcp-server",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "VSCode MCP relay that supports multiple workspaces",
   "main": "dist/index.js",
   "bin": {
