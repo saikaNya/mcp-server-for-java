@@ -63,7 +63,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
   }
 
   // Register VSCode commands
-  registerVSCodeCommands(context, mcpServer, outputChannel, startServer);
+  registerVSCodeCommands(context, mcpServer, outputChannel);
 
   // Register cleanup on deactivation
   context.subscriptions.push({

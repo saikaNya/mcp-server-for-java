@@ -66,18 +66,28 @@ export class BidiHttpTransport implements Transport {
         const message = req.body as JSONRPCMessage;
 
         // Check relay version for tools/call requests
-        if ('method' in message && message.method === 'tools/call') {
+        const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
+        if ('method' in message && message.method === 'tools/call' && enableVersionCheck !== false) {
           const relayVersion = req.headers['x-relay-version'] as string | undefined;
           if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
             const now = Date.now();
-            const displayVersion = relayVersion || 'unknown';
-            this.outputChannel.appendLine(`Warning: Relay version ${displayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
+            if(!relayVersion){
+              this.outputChannel.appendLine(`Warning: Relay version is missing， (minimum required: ${MIN_RELAY_VERSION})`); 
+            }
+            else{
+              this.outputChannel.appendLine(`Warning: Relay version ${relayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
+            }
+            
             
             // Only show warning if cooldown period has passed
             if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
               lastVersionWarningTime = now;
+              const warningMessage = !relayVersion
+                ? `vscode-to-mcp-server npm package is not installed (required: >= ${MIN_RELAY_VERSION}). \nClick "View Extension" to see details and resolve the issue.\n\nvscode-to-mcp-server npm 包未安装（需要版本 >= ${MIN_RELAY_VERSION}）。点击"View Extension"查看插件详情页并解决问题。`
+                : `vscode-to-mcp-server npm package version is outdated (current: ${relayVersion}, required: >= ${MIN_RELAY_VERSION}). \nClick "View Extension" to see details and resolve the issue.\n\nvscode-to-mcp-server npm 包版本过旧（当前版本：${relayVersion}，需要版本 >= ${MIN_RELAY_VERSION}）。点击"View Extension"查看插件详情页并解决问题。`;
+              
               vscode.window.showWarningMessage(
-                `vscode-to-mcp-server npm package version is outdated (current: ${displayVersion}, required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see details and resolve the issue.`,
+                warningMessage,
                 'View Extension'
               ).then(selection => {
                 if (selection === 'View Extension') {

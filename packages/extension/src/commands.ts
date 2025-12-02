@@ -4,8 +4,7 @@ import * as vscode from 'vscode';
 export function registerVSCodeCommands(
   context: vscode.ExtensionContext,
   mcpServer: McpServer,
-  outputChannel: vscode.OutputChannel,
-  startServer: (port?: number) => Promise<void>
+  outputChannel: vscode.OutputChannel
 ) {
   // COMMAND PALETTE COMMAND: Stop the MCP Server
   context.subscriptions.push(
@@ -22,18 +21,4 @@ export function registerVSCodeCommands(
     }),
   );
 
-  // COMMAND PALETTE COMMAND: Start the MCP Server
-  context.subscriptions.push(
-    vscode.commands.registerCommand('mcpServer.startServer', async () => {
-      try {
-        const port = vscode.workspace.getConfiguration('mcpServer').get<number>('port', 60100);
-        await startServer(port);
-        outputChannel.appendLine(`MCP Server started on port ${port}.`);
-        vscode.window.showInformationMessage(`MCP Server started on port ${port}.`);
-      } catch (err) {
-        outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
-        vscode.window.showErrorMessage(`Failed to start MCP Server: ${err}`);
-      }
-    }),
-  );
 }

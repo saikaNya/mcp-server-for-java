@@ -21,10 +21,6 @@
       {
         "command": "mcpServer.stopServer",
         "title": "MCP Server: Stop Server"
-      },
-      {
-        "command": "mcpServer.startServer",
-        "title": "MCP Server: Start Server"
       }
     ],
     "configuration": {
@@ -35,15 +31,15 @@
           "default": true,
           "description": "Determines if the MCP Server should start automatically on VSCode activation."
         },
-        "mcpServer.port": {
-          "type": "number",
-          "default": 60100,
-          "description": "The port that the MCP Server listens on. Set in case of conflicts or custom configurations."
-        },
         "mcpServer.maxOutputLength": {
           "type": "number",
           "default": 70000,
           "description": "Maximum output length in characters. An error will be reported when Java type source code exceeds this limit."
+        },
+        "mcpServer.enableRelayVersionCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable relay version update check and notification. Set to false to disable version warnings."
         }
       }
     }
