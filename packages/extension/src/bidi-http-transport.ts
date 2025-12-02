@@ -83,8 +83,8 @@ export class BidiHttpTransport implements Transport {
             if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
               lastVersionWarningTime = now;
               const warningMessage = !relayVersion
-                ? `vscode-to-mcp-server npm package is not installed (required: >= ${MIN_RELAY_VERSION}). \nClick "View Extension" to see details and resolve the issue.\n\nvscode-to-mcp-server npm 包未安装（需要版本 >= ${MIN_RELAY_VERSION}）。点击"View Extension"查看插件详情页并解决问题。`
-                : `vscode-to-mcp-server npm package version is outdated (current: ${relayVersion}, required: >= ${MIN_RELAY_VERSION}). \nClick "View Extension" to see details and resolve the issue.\n\nvscode-to-mcp-server npm 包版本过旧（当前版本：${relayVersion}，需要版本 >= ${MIN_RELAY_VERSION}）。点击"View Extension"查看插件详情页并解决问题。`;
+                ? `vscode-to-mcp-server npm package is not installed (required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | npm 包未安装，点击"View Extension"查看解决方案。`
+                : `vscode-to-mcp-server npm package is outdated (current: ${relayVersion}, required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | npm 包版本过旧，点击"View Extension"查看解决方案。`;
               
               vscode.window.showWarningMessage(
                 warningMessage,

@@ -39,7 +39,8 @@
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.8.0",
     "fs-extra": "^11.3.0",
-    "hono": "^4.7.5"
+    "hono": "^4.7.5",
+    "zod": "^3.24.0"
   },
   "packageManager": "pnpm@10.6.1+sha512.40ee09af407fa9fbb5fbfb8e1cb40fbb74c0af0c3e10e9224d7b53c7658528615b2c92450e74cfad91e3a2dcafe3ce4050d80bda71d757756d2ce2b66213e9a3"
 }
