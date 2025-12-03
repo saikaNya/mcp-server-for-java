@@ -8,15 +8,23 @@
 >
 > MCP 客户端配置需要从：
 > ```json
-> { "command": "npx", "args": ["vscode-as-mcp-server"] }
+> {
+>   "command": "npx",
+>   "args": ["vscode-as-mcp-server"]
+> }
 > ```
 > 或
 > ```json
-> { "url": "http://localhost:60100" }
+> {
+>   "url": "http://localhost:60100"
+> }
 > ```
 > 修改为：
 > ```json
-> { "command": "npx", "args": ["vscode-to-mcp-server"] }
+> {
+>   "command": "npx",
+>   "args": ["vscode-to-mcp-server"]
+> }
 > ```
 > 如果不修改配置，将无法自动在多工作区间切换，只能获取第一个打开的工作区的类。
 
@@ -24,19 +32,14 @@
 Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在编写 Java 项目时，可以访问项目本身的源代码，但**无法获取项目依赖的类定义与源码**。
 
 本插件将 VSCode/Cursor 转变为 MCP 服务器，让 AI Agent 能够：
-- **搜索 Java 类型**：在项目、外部依赖和 JDK 中搜索类、接口、枚举
-- **获取源代码**：通过全限定名获取任意可访问类的源码（包括依赖库和 JDK）
+- **搜索 Java 类型**：通过名称或部分名称在项目、外部依赖和 JDK 中搜索类 ————对应mcp工具`searchJavaTypes`
+- **获取源代码**：通过全限定名获取任意可访问类的源码（包括依赖库和 JDK）————对应mcp工具`getSourceCodeByFQN`
 
 ![获取类的定义](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/getTypeDefinition_cn.gif)
 
 ## 多工作区支持
 - v0.0.3 之前：通过点击状态栏在多个 VSCode/Cursor 工作区之间切换 MCP 服务器
 - v0.0.3 起：支持同时连接多个工作区，除非用户指定 AI Agent 会自动选择当前活动窗口对应的工作区
-
-## 内置工具
-
-- **searchJavaTypes**: 按名称搜索Java类型（类、接口和枚举）
-- **getSourceCodeByFQN**: 通过完全限定名获取Java类型的源代码定义
 
 ## 首次安装与设置
 
@@ -90,15 +93,23 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 >
 > MCP client configuration needs to be changed from:
 > ```json
-> { "command": "npx", "args": ["vscode-as-mcp-server"] }
+> {
+>   "command": "npx",
+>   "args": ["vscode-as-mcp-server"]
+> }
 > ```
 > or
 > ```json
-> { "url": "http://localhost:60100" }
+> {
+>   "url": "http://localhost:60100"
+> }
 > ```
 > to:
 > ```json
-> { "command": "npx", "args": ["vscode-to-mcp-server"] }
+> {
+>   "command": "npx",
+>   "args": ["vscode-to-mcp-server"]
+> }
 > ```
 > Without updating the configuration, automatic multi-workspace switching will not work, and only classes from the first opened workspace will be accessible.
 
@@ -106,19 +117,14 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 AI Code Agents based on VSCode (such as Cursor, Github Copilot, Windsurf) can access a Java project's own source code, but **cannot retrieve class definitions and source code from project dependencies**.
 
 This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
-- **Search Java Types**: Find classes, interfaces, and enums across your project, external dependencies, and JDK
-- **Get Source Code**: Retrieve source code of any accessible class by fully qualified name (including dependency libraries and JDK)
+- **Search Java Types**: Search for classes by name or partial name across your project, external dependencies, and JDK — corresponding MCP tool `searchJavaTypes`
+- **Get Source Code**: Retrieve source code of any accessible class by fully qualified name (including dependency libraries and JDK) — corresponding MCP tool `getSourceCodeByFQN`
 
 ![Get Type Definition](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/getTypeDefinition_eng.gif)
 
 ## Multi-Workspace Support
 - Before v0.0.3: Switch MCP server between multiple VSCode/Cursor workspaces by clicking the status bar
 - From v0.0.3: Supports connecting to multiple workspaces simultaneously. Unless specified by the user, AI Agent will automatically select the workspace corresponding to the currently active window
-
-## Built-in Tools
-
-- **searchJavaTypes**: Search for Java types (classes, interfaces, and enums) by name
-- **getSourceCodeByFQN**: Retrieve the source code definition of a Java type by its fully qualified name
 
 ## Installation & Setup
 

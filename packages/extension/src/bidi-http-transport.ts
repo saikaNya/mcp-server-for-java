@@ -82,9 +82,10 @@ export class BidiHttpTransport implements Transport {
             // Only show warning if cooldown period has passed
             if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
               lastVersionWarningTime = now;
-              const warningMessage = !relayVersion
-                ? `vscode-to-mcp-server npm package is not installed (required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | npm 包未安装，点击"View Extension"查看解决方案。`
-                : `vscode-to-mcp-server npm package is outdated (current: ${relayVersion}, required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | npm 包版本过旧，点击"View Extension"查看解决方案。`;
+              // const warningMessage = !relayVersion
+              //   ? `mcp server configuration is not correct (required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | MCP 服务配置不正确，点击"View Extension"查看解决方案。`
+              //   : `vscode-to-mcp-server npm package is outdated (current: ${relayVersion}, required: >= ${MIN_RELAY_VERSION}). Click "View Extension" to see the solution. | npm 包版本过旧，点击"View Extension"查看解决方案。`;
+              const warningMessage = `mcp server configuration is not correct or outdated. Click "View Extension" to see the solution. | MCP 服务配置不正确或过旧 ，点击"View Extension"查看解决方案。`;
               
               vscode.window.showWarningMessage(
                 warningMessage,
