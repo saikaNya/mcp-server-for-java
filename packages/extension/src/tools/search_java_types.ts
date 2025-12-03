@@ -11,7 +11,7 @@ interface SearchJavaTypesResult {
   isError?: boolean;
 }
 
-export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypesSchema>): Promise<SearchJavaTypesResult> {
+export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypesSchema>, outputChannel: vscode.OutputChannel): Promise<SearchJavaTypesResult> {
   const name = params.name
   // 搜索依赖包中的类
   try {
@@ -38,12 +38,17 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
         // 尝试从符号容器名称和符号名称构建全限定名
         let fullyQualifiedName = symbol.name;
 
-        if(symbol.name.includes('.')){
+        const uri = symbol.location.uri;
+        const uriInfo = `scheme: ${uri.scheme}, authority: ${uri.authority}, path: ${uri.path}, query: ${uri.query}, fragment: ${uri.fragment}, fsPath: ${uri.fsPath}`;
+        
+        if (symbol.name.includes('.')) {
+          outputChannel.appendLine(`[searchJavaTypes] symbol.name contains dot: ${symbol.name}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
           return symbol.name
         }
         if (symbol.containerName && symbol.containerName.length > 0) {
           fullyQualifiedName = `${symbol.containerName}.${symbol.name}`;
         }
+        outputChannel.appendLine(`[searchJavaTypes] fullyQualifiedName: ${fullyQualifiedName}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
         return fullyQualifiedName;
       });
 
