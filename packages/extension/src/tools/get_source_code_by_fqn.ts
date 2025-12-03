@@ -3,7 +3,8 @@ import { z } from "zod";
 
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
-    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise.")
+    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."),
+    uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri.")
 })
 
 interface GetSourceCodeByFQNResult {
@@ -32,7 +33,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         }
 
         // 找到精确匹配的符号
-        const exactMatch = symbolDetails.find(symbol => {
+        const exactMatches = symbolDetails.filter(symbol => {
             let symbolFQN = symbol.name;
             if (symbol.name.includes('.')) {
                 symbolFQN = symbol.name;
@@ -42,10 +43,19 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             return symbolFQN === fqn;
         });
 
-        if (!exactMatch) {
+        if (exactMatches.length === 0) {
             return {
                 content: [{ type: 'text', text: `Could not find exact match for type: ${fqn}` }]
             };
+        }
+
+        // 如果提供了 uriPath，则用它来进一步筛选
+        let exactMatch = exactMatches[0];
+        if (params.uriPath && exactMatches.length > 1) {
+            const matchByUri = exactMatches.find(symbol => symbol.location.uri.path === params.uriPath);
+            if (matchByUri) {
+                exactMatch = matchByUri;
+            }
         }
 
         // 获取源代码
@@ -63,10 +73,10 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             };
         }
         
-        return {
+        return {    
             content: [{
                 type: 'text',
-                text: `\`\`\`java
+                text: `\`\`\`java:${exactMatch.location.uri.path}
 ${sourceCode}
 \`\`\``
             }]

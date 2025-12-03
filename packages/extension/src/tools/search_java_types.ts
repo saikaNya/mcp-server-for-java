@@ -27,7 +27,7 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
     }
 
     // 过滤可能的非Java类型并提取全限定名
-    const javaTypes = symbols
+    const javaTypesWithUri = symbols
       .filter(symbol =>
         symbol.location.uri.fsPath.endsWith('.java') ||
         symbol.location.uri.fsPath.endsWith('.class') ||
@@ -43,20 +43,36 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
         
         if (symbol.name.includes('.')) {
           outputChannel.appendLine(`[searchJavaTypes] symbol.name contains dot: ${symbol.name}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
-          return symbol.name
+          return { fullyQualifiedName: symbol.name, uriPath: uri.path };
         }
         if (symbol.containerName && symbol.containerName.length > 0) {
           fullyQualifiedName = `${symbol.containerName}.${symbol.name}`;
         }
         outputChannel.appendLine(`[searchJavaTypes] fullyQualifiedName: ${fullyQualifiedName}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
-        return fullyQualifiedName;
+        return { fullyQualifiedName, uriPath: uri.path };
       });
+
+    // 统计每个全限定名出现的次数
+    const fqnCount = new Map<string, number>();
+    for (const item of javaTypesWithUri) {
+      fqnCount.set(item.fullyQualifiedName, (fqnCount.get(item.fullyQualifiedName) || 0) + 1);
+    }
+
+    // 根据是否重复决定返回格式
+    const javaTypes = javaTypesWithUri.map(item => {
+      if ((fqnCount.get(item.fullyQualifiedName) || 0) > 1) {
+        // 存在相同全限定名，返回带 uriPath 的对象
+        return { fullyQualifiedName: item.fullyQualifiedName, uriPath: item.uriPath };
+      }
+      // 全限定名唯一，返回不带 uriPath 的对象
+      return { fullyQualifiedName: item.fullyQualifiedName };
+    });
 
     return {
       content: [{
         type: 'text',
         text: javaTypes.length > 0
-          ? '[' + javaTypes.join(',') + ']'
+          ? JSON.stringify(javaTypes)
           : `[]`
       }]
     };
