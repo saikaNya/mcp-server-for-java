@@ -13,7 +13,7 @@ const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
 const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
-const RELAY_VERSION = '0.0.6';
+const RELAY_VERSION = '0.0.8';
 
 class MCPRelay {
   private mcpServer: McpServer;
