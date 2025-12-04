@@ -3,7 +3,7 @@
   "displayName": "MCP Server for Java",
   "description": "Expose VSCode features such as find type or get type definition as MCP, enabling the LLM to access these functionalities.",
   "publisher": "saika",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "commonjs",
   "icon": "icon.png",
   "engines": {

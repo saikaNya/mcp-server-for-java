@@ -34,6 +34,10 @@ export const initialTools = [
           "type": "string",
           "description": "The fully qualified name (FQN) of the Java type to retrieve its source code."
         },
+        "uriPath": {
+          "type": "string",
+          "description": "The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri."
+        },
         "workspace": workspaceProperty
       },
       "required": [

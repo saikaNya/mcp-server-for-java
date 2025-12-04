@@ -81,11 +81,13 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 | `mcpServer.maxOutputLength` | number | `70000` | 最大输出 Java 源代码字符数。当要获取的类的源代码超过此限制时会报错。不建议设置过大，过大会导致模型 input token 过大无法请求模型，或无法将类的源代码放入上下文中。 |
 | `mcpServer.enableRelayVersionCheck` | boolean | `true` | 是否启用 relay 版本更新检查和通知。设置为 `false` 可禁用版本更新提醒。 |
 
-## 后续规划
-1. 支持查询类源文件指定具体版本
-
 ## 联系
 **非常欢迎大家对插件的问题，bug或新功能建议进行反馈！** 🙇
+
+## 更新日志
+- **0.0.4** 支持获取工作区中存在的全限定名相同但版本不同的类
+- **0.0.3** mcp指令执行在多个工作区自动路由，无需手动切换
+- **0.0.2** 修改了查询全限定名有时候会查出不符合条件的结果的bug
 
 <h1 id="en-readme">MCP Server For Java</h1>
 
@@ -166,8 +168,10 @@ When you cannot find the class, class definition, or specific implementation of 
 | `mcpServer.maxOutputLength` | number | `70000` | Maximum number of characters for Java source code output. An error will be reported when the source code exceeds this limit. It is not recommended to set it too large, as excessive values may cause the model's input token to be too large or make it impossible to place the class source code in the context. |
 | `mcpServer.enableRelayVersionCheck` | boolean | `true` | Whether to enable relay version update check and notification. Set to `false` to disable version update warnings. |
 
-## Future Plans
-1. Support querying class source files for specific versions
-
 ## Contact
 **Feedback on issues, bugs, or suggestions for new features is highly welcomed!** 🙇
+
+## Changelog
+- **0.0.4** Support for retrieving classes with the same fully qualified name from multiple versions
+- **0.0.3** MCP commands auto-route to multiple workspaces without manual switching
+- **0.0.2** Fixed a bug where querying fully qualified names sometimes returned non-matching results

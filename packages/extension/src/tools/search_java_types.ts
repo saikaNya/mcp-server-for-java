@@ -39,16 +39,13 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
         let fullyQualifiedName = symbol.name;
 
         const uri = symbol.location.uri;
-        const uriInfo = `scheme: ${uri.scheme}, authority: ${uri.authority}, path: ${uri.path}, query: ${uri.query}, fragment: ${uri.fragment}, fsPath: ${uri.fsPath}`;
         
         if (symbol.name.includes('.')) {
-          outputChannel.appendLine(`[searchJavaTypes] symbol.name contains dot: ${symbol.name}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
           return { fullyQualifiedName: symbol.name, uriPath: uri.path };
         }
         if (symbol.containerName && symbol.containerName.length > 0) {
           fullyQualifiedName = `${symbol.containerName}.${symbol.name}`;
         }
-        outputChannel.appendLine(`[searchJavaTypes] fullyQualifiedName: ${fullyQualifiedName}, kind: ${vscode.SymbolKind[symbol.kind]}, ${uriInfo}`);
         return { fullyQualifiedName, uriPath: uri.path };
       });
 
@@ -62,10 +59,10 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
     const javaTypes = javaTypesWithUri.map(item => {
       if ((fqnCount.get(item.fullyQualifiedName) || 0) > 1) {
         // 存在相同全限定名，返回带 uriPath 的对象
-        return { fullyQualifiedName: item.fullyQualifiedName, uriPath: item.uriPath };
+        return { fqn: item.fullyQualifiedName, uriPath: item.uriPath };
       }
       // 全限定名唯一，返回不带 uriPath 的对象
-      return { fullyQualifiedName: item.fullyQualifiedName };
+      return item.fullyQualifiedName
     });
 
     return {

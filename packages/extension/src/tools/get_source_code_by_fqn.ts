@@ -3,8 +3,8 @@ import { z } from "zod";
 
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
-    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."),
-    uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri.")
+    uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri."),
+    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise.")
 })
 
 interface GetSourceCodeByFQNResult {
@@ -52,7 +52,23 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         // 如果提供了 uriPath，则用它来进一步筛选
         let exactMatch = exactMatches[0];
         if (params.uriPath && exactMatches.length > 1) {
-            const matchByUri = exactMatches.find(symbol => symbol.location.uri.path === params.uriPath);
+            // 标准化 uriPath：如果不是以 / 开头，则添加 /
+            let normalizedUriPath = params.uriPath;
+            if (!normalizedUriPath.startsWith('/')) {
+                normalizedUriPath = '/' + normalizedUriPath;
+            }
+            
+            // 检测是否为 Windows 路径（包含盘符如 /c: 或 /C:）
+            const isWindowsPath = /^\/[a-zA-Z]:/.test(normalizedUriPath);
+            
+            const matchByUri = exactMatches.find(symbol => {
+                const symbolPath = symbol.location.uri.path;
+                if (isWindowsPath) {
+                    // Windows 路径忽略大小写
+                    return symbolPath.toLowerCase() === normalizedUriPath.toLowerCase();
+                }
+                return symbolPath === normalizedUriPath;
+            });
             if (matchByUri) {
                 exactMatch = matchByUri;
             }
