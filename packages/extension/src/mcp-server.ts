@@ -166,12 +166,12 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
   const toolRegistry = new ToolRegistry(mcpServer.server);
 
   // Register tools
-  registerTools(toolRegistry, _outputChannel);
+  registerTools(toolRegistry);
 
   return mcpServer;
 }
 
-function registerTools(mcpServer: ToolRegistry, outputChannel: vscode.OutputChannel) {
+function registerTools(mcpServer: ToolRegistry) {
 
    // Register the "searchJavaTypes" tool
    mcpServer.tool(
@@ -183,7 +183,7 @@ function registerTools(mcpServer: ToolRegistry, outputChannel: vscode.OutputChan
     `.trim(),
     searchJavaTypesSchema.shape,
     async (params) => {   
-      const result = await searchJavaTypesTool(params, outputChannel);
+      const result = await searchJavaTypesTool(params);
       return {
         content: result.content.map(item => ({
           ...item,

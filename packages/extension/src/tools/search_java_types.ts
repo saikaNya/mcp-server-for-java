@@ -11,7 +11,7 @@ interface SearchJavaTypesResult {
   isError?: boolean;
 }
 
-export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypesSchema>, outputChannel: vscode.OutputChannel): Promise<SearchJavaTypesResult> {
+export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypesSchema>): Promise<SearchJavaTypesResult> {
   const name = params.name
   // 搜索依赖包中的类
   try {
