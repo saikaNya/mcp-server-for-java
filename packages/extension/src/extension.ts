@@ -16,25 +16,6 @@ export const activate = async (context: vscode.ExtensionContext) => {
   const outputChannel = vscode.window.createOutputChannel(extensionDisplayName);
   outputChannel.appendLine(`Activating ${extensionDisplayName}...`);
 
-  // Check for extension version update and open extension page
-  const extensionId = 'saika.mcp-server-for-java';
-  const extension = vscode.extensions.getExtension(extensionId);
-  const currentVersion = extension?.packageJSON.version as string | undefined;
-  const previousVersion = context.globalState.get<string>('extensionVersion');
-
-  if (currentVersion && currentVersion !== previousVersion) {
-    // Save current version
-    await context.globalState.update('extensionVersion', currentVersion);
-
-    // If previous version exists (update, not fresh install), open extension page
-    if (previousVersion) {
-      outputChannel.appendLine(`Extension updated from v${previousVersion} to v${currentVersion}, opening extension page...`);
-      vscode.commands.executeCommand('extension.open', extensionId);
-    } else {
-      outputChannel.appendLine(`Extension v${currentVersion} installed for the first time.`);
-    }
-  }
-
   // Get current workspace path
   currentWorkspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
