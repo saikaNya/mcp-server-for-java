@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { z } from "zod";
+import { waitForJavaLspReady } from "../utils/java-lsp";
 
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
@@ -16,6 +17,15 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
     const fqn = params.fullyQualifiedName;
 
     try {
+        // 检查 Java LSP 是否就绪
+        const lspCheck = await waitForJavaLspReady();
+        if (!lspCheck.ready) {
+            return {
+                content: [{ type: 'text', text: lspCheck.errorMessage || 'Java Language Server is not ready.' }],
+                isError: true
+            };
+        }
+
         // 获取最大输出字符数配置
         const config = vscode.workspace.getConfiguration('mcpServer');
         const maxOutputLength = config.get<number>('maxOutputLength') || 70000;
@@ -92,7 +102,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         return {    
             content: [{
                 type: 'text',
-                text: `\`\`\`java:${exactMatch.location.uri.path}
+                text: `\`\`\`java uriPath=${exactMatch.location.uri.path}
 ${sourceCode}
 \`\`\``
             }]

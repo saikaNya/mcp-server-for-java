@@ -1,8 +1,8 @@
 /**
- * Port Router Table Management
+ * Port Router Table Management (Read-Only)
  * 
- * Maintains a mapping between workspace paths and their assigned ports.
- * The router table is stored in the user's home directory.
+ * Relay only needs to read the router table to find workspace ports.
+ * The extension is responsible for writing/managing the router table.
  */
 
 import * as fs from 'node:fs/promises';
@@ -11,7 +11,6 @@ import * as os from 'node:os';
 
 const ROUTER_TABLE_FILE = path.join(os.homedir(), '.vscode-mcp-router.json');
 const DEFAULT_PORT = 60100;
-const MAX_PORT = 63999;
 
 export interface RouterEntry {
   workspace: string;
@@ -37,7 +36,7 @@ export function normalizeWorkspacePath(workspacePath: string): string {
 /**
  * Loads the router table from disk.
  */
-export async function loadRouterTable(): Promise<RouterTable> {
+async function loadRouterTable(): Promise<RouterTable> {
   try {
     const data = await fs.readFile(ROUTER_TABLE_FILE, 'utf8');
     return JSON.parse(data) as RouterTable;
@@ -47,16 +46,9 @@ export async function loadRouterTable(): Promise<RouterTable> {
 }
 
 /**
- * Saves the router table to disk.
- */
-export async function saveRouterTable(table: RouterTable): Promise<void> {
-  await fs.writeFile(ROUTER_TABLE_FILE, JSON.stringify(table, null, 2), 'utf8');
-}
-
-/**
  * Finds a workspace entry in the router table.
  */
-export async function findWorkspaceEntry(workspacePath: string): Promise<RouterEntry | undefined> {
+async function findWorkspaceEntry(workspacePath: string): Promise<RouterEntry | undefined> {
   const table = await loadRouterTable();
   const normalized = normalizeWorkspacePath(workspacePath);
   return table.entries.find(e => normalizeWorkspacePath(e.workspace) === normalized);
@@ -68,78 +60,6 @@ export async function findWorkspaceEntry(workspacePath: string): Promise<RouterE
 export async function getPortForWorkspace(workspacePath: string): Promise<number | undefined> {
   const entry = await findWorkspaceEntry(workspacePath);
   return entry?.port;
-}
-
-/**
- * Checks if a port is currently in use by any registered workspace.
- */
-export async function isPortInUse(port: number): Promise<boolean> {
-  const table = await loadRouterTable();
-  return table.entries.some(e => e.port === port);
-}
-
-/**
- * Finds the next available port, prioritizing DEFAULT_PORT (60100) first.
- */
-export async function findAvailablePort(): Promise<number> {
-  const table = await loadRouterTable();
-  const usedPorts = new Set(table.entries.map(e => e.port));
-  
-  // First, try the default port 60100
-  if (!usedPorts.has(DEFAULT_PORT)) {
-    return DEFAULT_PORT;
-  }
-  
-  // If default port is not available, find the next available port
-  for (let port = DEFAULT_PORT + 1; port <= MAX_PORT; port++) {
-    if (!usedPorts.has(port)) {
-      return port;
-    }
-  }
-  
-  throw new Error('No available ports in range');
-}
-
-/**
- * Registers a workspace with a specific port in the router table.
- */
-export async function registerWorkspace(workspacePath: string, port: number, pid?: number): Promise<void> {
-  const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
-  
-  // Remove existing entry for this workspace if exists
-  table.entries = table.entries.filter(e => normalizeWorkspacePath(e.workspace) !== normalized);
-  
-  // Add new entry
-  table.entries.push({
-    workspace: workspacePath,
-    port,
-    pid,
-    lastUpdated: Date.now(),
-  });
-  
-  await saveRouterTable(table);
-}
-
-/**
- * Unregisters a workspace from the router table.
- */
-export async function unregisterWorkspace(workspacePath: string): Promise<void> {
-  const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
-  
-  table.entries = table.entries.filter(e => normalizeWorkspacePath(e.workspace) !== normalized);
-  
-  await saveRouterTable(table);
-}
-
-/**
- * Unregisters a workspace by port from the router table.
- */
-export async function unregisterByPort(port: number): Promise<void> {
-  const table = await loadRouterTable();
-  table.entries = table.entries.filter(e => e.port !== port);
-  await saveRouterTable(table);
 }
 
 /**
@@ -156,4 +76,3 @@ export async function listWorkspaces(): Promise<RouterEntry[]> {
 export function getDefaultPort(): number {
   return DEFAULT_PORT;
 }
-

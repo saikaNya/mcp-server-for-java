@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { z } from "zod";
+import { waitForJavaLspReady } from "../utils/java-lsp";
 
 export const searchJavaTypesSchema = z.object({
   name: z.string().describe("The name or partial name of the Java types (classes, enums, and interfaces) to search for."),
@@ -15,6 +16,15 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
   const name = params.name
   // 搜索依赖包中的类
   try {
+    // 检查 Java LSP 是否就绪
+    const lspCheck = await waitForJavaLspReady();
+    if (!lspCheck.ready) {
+      return {
+        content: [{ type: 'text', text: lspCheck.errorMessage || 'Java Language Server is not ready.' }],
+        isError: true
+      };
+    }
+
     const symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
       'vscode.executeWorkspaceSymbolProvider',
       name
