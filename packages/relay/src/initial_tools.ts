@@ -41,7 +41,7 @@ export const initialTools = [
           "items": {
             "type": "string"
           },
-          "description": "Optional list of method names to filter. If provided, only the specified methods will be returned; other methods of the class will be omitted, while all non-method parts of the class (fields, imports, annotations, etc.) are preserved."
+          "description": "Optional list of method names to filter. If provided, only methods whose simple name is in this list will be returned; all other methods will not be included in the result, but the rest of the class content is kept unchanged."
         },
         "uriPath": {
           "type": "string",

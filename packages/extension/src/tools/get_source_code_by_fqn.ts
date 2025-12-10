@@ -6,7 +6,7 @@ import { debug } from "../utils/logger";
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
     workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."),
-    methodNames: z.array(z.string()).optional().describe("Optional list of method names to filter. If provided, only the specified methods will be returned; other methods of the class will be omitted, while all non-method parts of the class (fields, imports, annotations, etc.) are preserved."),
+    methodNames: z.array(z.string()).optional().describe("Optional list of method names to filter. If provided, only methods whose simple name is in this list will be returned; all other methods will not be included in the result, but the rest of the class content is kept unchanged."),
     uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri.")
 })
 
