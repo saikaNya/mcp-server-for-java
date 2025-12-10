@@ -3,6 +3,7 @@ import { BidiHttpTransport } from './bidi-http-transport';
 import { registerVSCodeCommands } from './commands';
 import { createMcpServer, extensionDisplayName } from './mcp-server';
 import { DIFF_VIEW_URI_SCHEME } from './utils/DiffViewProvider';
+import { initLogger } from './utils/logger';
 import { findAvailablePort, registerWorkspace, unregisterWorkspace } from './utils/router-table';
 
 let transport: BidiHttpTransport;
@@ -14,6 +15,7 @@ export const activate = async (context: vscode.ExtensionContext) => {
 
   // Create the output channel for logging
   const outputChannel = vscode.window.createOutputChannel(extensionDisplayName);
+  initLogger(outputChannel);
   outputChannel.appendLine(`Activating ${extensionDisplayName}...`);
 
   // Get current workspace path

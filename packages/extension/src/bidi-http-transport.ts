@@ -15,7 +15,7 @@ const VERSION_WARNING_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown between
 function compareVersions(v1: string, v2: string): number {
   const parts1 = v1.split('.').map(Number);
   const parts2 = v2.split('.').map(Number);
-  
+
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const p1 = parts1[i] || 0;
     const p2 = parts2[i] || 0;
@@ -72,9 +72,14 @@ export class BidiHttpTransport implements Transport {
     });
 
     app.post('/', express.json(), async (req: express.Request, res: express.Response) => {
-      this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
+      const message = req.body as JSONRPCMessage;
+
+      // 对于 tools/list 方法，不打印日志
+      if (!('method' in message && message.method === 'tools/list')) {
+        this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
+      }
+
       try {
-        const message = req.body as JSONRPCMessage;
 
         // Check relay version for tools/call requests
         const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
@@ -82,19 +87,19 @@ export class BidiHttpTransport implements Transport {
           const relayVersion = req.headers['x-relay-version'] as string | undefined;
           if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
             const now = Date.now();
-            if(!relayVersion){
-              this.outputChannel.appendLine(`Warning: Relay version is missing， (minimum required: ${MIN_RELAY_VERSION})`); 
+            if (!relayVersion) {
+              this.outputChannel.appendLine(`Warning: Relay version is missing， (minimum required: ${MIN_RELAY_VERSION})`);
             }
-            else{
+            else {
               this.outputChannel.appendLine(`Warning: Relay version ${relayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
             }
-            
-            
+
+
             // Only show warning if cooldown period has passed
             if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
               lastVersionWarningTime = now;
               const warningMessage = `mcp server configuration is not correct or outdated. Click "View Extension" to see the solution. | MCP 服务配置不正确或过旧 ，点击"View Extension"查看解决方案。`;
-              
+
               vscode.window.showWarningMessage(
                 warningMessage,
                 'View Extension'
@@ -152,12 +157,12 @@ export class BidiHttpTransport implements Transport {
     // Try to start server with port retry logic
     const startServerWithRetry = async (): Promise<number> => {
       const triedPorts: number[] = [];
-      
+
       // Try the initial port and up to PORT_RETRY_COUNT additional ports
       for (let i = 0; i <= PORT_RETRY_COUNT; i++) {
         const port = this.listenPort + i;
         triedPorts.push(port);
-        
+
         try {
           return await tryStartServer(port);
         } catch (err) {
@@ -174,16 +179,16 @@ export class BidiHttpTransport implements Transport {
           }
         }
       }
-      
+
       // All ports failed, show warning and throw error
       const errorMessage = `Failed to start MCP Server. Tried ports ${triedPorts[0]}-${triedPorts[triedPorts.length - 1]}, all are occupied or unavailable.`;
       this.outputChannel.appendLine(errorMessage);
-      
+
       vscode.window.showWarningMessage(
         `${errorMessage} Please check if another application is using these ports. | MCP服务器启动失败，端口 ${triedPorts[0]}-${triedPorts[triedPorts.length - 1]} 均被占用或不可用，请检查是否有其他应用占用这些端口。`,
         'OK'
       );
-      
+
       throw new Error(errorMessage);
     };
 
@@ -198,7 +203,14 @@ export class BidiHttpTransport implements Transport {
   }
 
   async send(message: JSONRPCMessage): Promise<void> {
-    this.outputChannel.appendLine('Sending message: ' + JSON.stringify(message));
+    // 对于 tools/list 方法的响应，不打印日志
+    const isToolsListResponse = 'id' in message && 'result' in message &&
+      typeof message.result === 'object' && message.result !== null &&
+      'tools' in message.result;
+
+    if (!isToolsListResponse) {
+      this.outputChannel.appendLine('Sending message: ' + JSON.stringify(message));
+    }
 
     if ('id' in message && 'result' in message) {
       // This is a response to a previous request
