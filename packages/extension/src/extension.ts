@@ -29,16 +29,18 @@ export const activate = async (context: vscode.ExtensionContext) => {
       port = await findAvailablePort();
     }
     
-    currentPort = port;
     outputChannel.appendLine(`DEBUG: Starting MCP Server on port ${port}...`);
     transport = new BidiHttpTransport(port, outputChannel, currentWorkspace);
 
     await mcpServer.connect(transport); // connect calls transport.start().
     
-    // Register workspace in router table
+    // Get the actual port (may differ from requested port if there was a conflict)
+    currentPort = transport.getActualPort() ?? port;
+    
+    // Register workspace in router table with actual port
     if (currentWorkspace) {
-      await registerWorkspace(currentWorkspace, port, process.pid);
-      outputChannel.appendLine(`Registered workspace ${currentWorkspace} with port ${port}`);
+      await registerWorkspace(currentWorkspace, currentPort, process.pid);
+      outputChannel.appendLine(`Registered workspace ${currentWorkspace} with port ${currentPort}`);
     }
   }
 

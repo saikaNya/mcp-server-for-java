@@ -28,18 +28,29 @@ function compareVersions(v1: string, v2: string): number {
 // Track last warning time to avoid spamming
 let lastVersionWarningTime = 0;
 
+const PORT_RETRY_COUNT = 10; // Number of additional ports to try if the initial port is occupied
+
 export class BidiHttpTransport implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
   private pendingResponses = new Map<string | number, (resp: JSONRPCMessage) => void>();
   private httpServer?: http.Server; // Express server instance
+  private actualPort?: number; // The actual port the server is running on
 
   constructor(
     readonly listenPort: number,
     private readonly outputChannel: vscode.OutputChannel,
     private readonly workspacePath?: string
   ) { }
+
+  /**
+   * Gets the actual port the server is running on.
+   * This may differ from listenPort if there was a port conflict.
+   */
+  getActualPort(): number | undefined {
+    return this.actualPort;
+  }
 
   async start(): Promise<void> {
     const app = express();
@@ -120,13 +131,14 @@ export class BidiHttpTransport implements Transport {
       }
     });
 
-    // Only try to listen on the specified port
-    const startServer = (port: number): Promise<number> => {
-      console.trace('Starting server on port: ' + port);
+    // Try to listen on the specified port
+    const tryStartServer = (port: number): Promise<number> => {
+      console.trace('Trying to start server on port: ' + port);
       return new Promise((resolve, reject) => {
         const server = app.listen(port)
           .once('listening', () => {
             this.httpServer = server; // Store server instance
+            this.actualPort = port; // Store the actual port
             this.outputChannel.appendLine(`MCP Server running at :${port}`);
             resolve(port);
           })
@@ -137,13 +149,51 @@ export class BidiHttpTransport implements Transport {
       });
     };
 
+    // Try to start server with port retry logic
+    const startServerWithRetry = async (): Promise<number> => {
+      const triedPorts: number[] = [];
+      
+      // Try the initial port and up to PORT_RETRY_COUNT additional ports
+      for (let i = 0; i <= PORT_RETRY_COUNT; i++) {
+        const port = this.listenPort + i;
+        triedPorts.push(port);
+        
+        try {
+          return await tryStartServer(port);
+        } catch (err) {
+          const errnoException = err as NodeJS.ErrnoException;
+          // Only retry if the error is port-related (EADDRINUSE or EACCES)
+          if (errnoException.code === 'EADDRINUSE' || errnoException.code === 'EACCES') {
+            if (i < PORT_RETRY_COUNT) {
+              this.outputChannel.appendLine(`Port ${port} is occupied, trying next port...`);
+              continue;
+            }
+          } else {
+            // For other errors, throw immediately
+            throw err;
+          }
+        }
+      }
+      
+      // All ports failed, show warning and throw error
+      const errorMessage = `Failed to start MCP Server. Tried ports ${triedPorts[0]}-${triedPorts[triedPorts.length - 1]}, all are occupied or unavailable.`;
+      this.outputChannel.appendLine(errorMessage);
+      
+      vscode.window.showWarningMessage(
+        `${errorMessage} Please check if another application is using these ports. | MCP服务器启动失败，端口 ${triedPorts[0]}-${triedPorts[triedPorts.length - 1]} 均被占用或不可用，请检查是否有其他应用占用这些端口。`,
+        'OK'
+      );
+      
+      throw new Error(errorMessage);
+    };
+
     try {
-      await startServer(this.listenPort);
-      this.outputChannel.appendLine('Server is now running');
+      const actualPort = await startServerWithRetry();
+      this.outputChannel.appendLine(`Server is now running on port ${actualPort}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      this.outputChannel.appendLine(`Failed to start server on port ${this.listenPort}: ${errorMessage}`);
-      throw new Error(`Failed to bind to port ${this.listenPort}: ${errorMessage}`);
+      this.outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
+      throw err;
     }
   }
 
