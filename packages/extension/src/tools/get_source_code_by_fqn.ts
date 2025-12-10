@@ -211,7 +211,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             return {
                 content: [{
                     type: 'text',
-                    text: `Error: Source code length (${sourceCode.length} characters) exceeds the maximum output length limit (${maxOutputLength} characters). `
+                    text: `Error: Source code length (${sourceCode.length} characters) exceeds the maximum output length limit (${maxOutputLength} characters). ${params.methodNames && params.methodNames.length > 0 ? '' : 'You can specify methodNames parameter to retrieve only specific methods and reduce the output size.'}`
                 }],
                 isError: true
             };
