@@ -7,7 +7,7 @@ const workspaceProperty = {
 export const initialTools = [
   {
     "name": "searchJavaTypes",
-    "description": "search for Java types (classes, enums, and interfaces) by their name or partial name. \nThe search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. \nThe result will return a list of fully qualified names of all matching Java types.",
+    "description": "Searches for Java types (classes, interfaces, and enums) by full name, partial name, or package name.\nThe search scope includes:\n- Project source code\n- External dependencies (libraries and frameworks)\n- JDK source code\nReturns a list of fully qualified names (FQNs) of all matching types.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -27,7 +27,7 @@ export const initialTools = [
   },
   {
     "name": "getSourceCodeByFQN",
-    "description": "Retrieves the source code definition of a Java type (class, enum, or interface) by its fully qualified name (FQN).\nThe search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK.",
+    "description": "Given a fully qualified name (FQN), returns the source code definition of the corresponding Java type (class, interface, or enum).\nThe search includes:\n- Project source code\n- External dependencies (libraries and frameworks)\n- JDK source code",
     "inputSchema": {
       "type": "object",
       "properties": {
