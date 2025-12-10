@@ -2,15 +2,101 @@ import * as vscode from "vscode";
 import { z } from "zod";
 import { waitForJavaLspReady } from "../utils/java-lsp";
 
+// 懒加载获取 outputChannel（与主扩展使用相同的名称）
+let _outputChannel: vscode.OutputChannel | undefined;
+function getOutputChannel(): vscode.OutputChannel {
+    if (!_outputChannel) {
+        _outputChannel = vscode.window.createOutputChannel('MCP Server for Java');
+    }
+    return _outputChannel;
+}
+
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
-    uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri."),
-    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise.")
+    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."),
+    methodNames: z.array(z.string()).optional().describe("Optional list of method names to filter. If provided, only the specified methods will be shown, other methods will be hidden while preserving the rest of the class content."),
+    uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri.")
 })
 
 interface GetSourceCodeByFQNResult {
     content: { type: 'text'; text: string }[];
     isError?: boolean;
+}
+
+interface MethodRange {
+    name: string;
+    startOffset: number;
+    endOffset: number;
+}
+
+/**
+ * 使用 LSP 获取文档中所有方法的范围信息
+ */
+async function getMethodRangesFromLsp(document: vscode.TextDocument): Promise<MethodRange[]> {
+    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+        'vscode.executeDocumentSymbolProvider',
+        document.uri
+    );
+    
+    if (!symbols || symbols.length === 0) {
+        return [];
+    }
+    
+    const methods: MethodRange[] = [];
+    
+    // 递归收集所有方法符号
+    function collectMethods(symbolList: vscode.DocumentSymbol[]) {
+        for (const symbol of symbolList) {
+            if (symbol.kind === vscode.SymbolKind.Method || symbol.kind === vscode.SymbolKind.Constructor) {
+                methods.push({
+                    name: symbol.name.replace(/\(.*\)$/, ''), // 移除参数部分，只保留方法名
+                    startOffset: document.offsetAt(symbol.range.start),
+                    endOffset: document.offsetAt(symbol.range.end)
+                });
+            }
+            // 递归处理嵌套符号（如内部类的方法）
+            if (symbol.children && symbol.children.length > 0) {
+                collectMethods(symbol.children);
+            }
+        }
+    }
+    
+    collectMethods(symbols);
+    return methods;
+}
+
+/**
+ * 根据方法名列表过滤源代码，只保留指定的方法（使用 LSP 提供的范围信息）
+ */
+async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: string, methodNames: string[]): Promise<string> {
+    const methods = await getMethodRangesFromLsp(document);
+    
+    if (methods.length === 0) {
+        return sourceCode;
+    }
+    
+    // 按位置从后向前排序，这样删除时不会影响前面的索引
+    const sortedMethods = [...methods].sort((a, b) => b.startOffset - a.startOffset);
+    
+    let result = sourceCode;
+    for (const method of sortedMethods) {
+        if (!methodNames.includes(method.name)) {
+            // 删除不匹配的方法
+            const beforeMethod = result.substring(0, method.startOffset);
+            const afterMethod = result.substring(method.endOffset);
+            
+            // 清理多余的空行
+            const trimmedBefore = beforeMethod.replace(/\n\s*$/, '\n');
+            const trimmedAfter = afterMethod.replace(/^\s*\n/, '\n');
+            
+            result = trimmedBefore + trimmedAfter;
+        }
+    }
+    
+    // 清理连续的多个空行为最多两个
+    result = result.replace(/\n{3,}/g, '\n\n');
+    
+    return result;
 }
 
 export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCodeByFQNSchema>): Promise<GetSourceCodeByFQNResult> {
@@ -86,7 +172,17 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
 
         // 获取源代码
         const document = await vscode.workspace.openTextDocument(exactMatch.location.uri);
-        const sourceCode = document.getText();
+        let sourceCode = document.getText();
+        
+        // 如果指定了方法名列表，则使用 LSP 过滤只保留指定的方法
+        if (params.methodNames && params.methodNames.length > 0) {
+            try {
+                sourceCode = await filterMethodsWithLsp(document, sourceCode, params.methodNames);
+            } catch (filterError) {
+                getOutputChannel().appendLine(`Failed to filter methods for ${fqn} (methods: ${params.methodNames.join(', ')}): ${filterError}`);
+                // 过滤失败时返回原始源代码
+            }
+        }
         
         // 检查源代码长度是否超出限制
         if (sourceCode.length > maxOutputLength) {

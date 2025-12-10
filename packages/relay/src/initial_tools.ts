@@ -13,7 +13,7 @@ export const initialTools = [
       "properties": {
         "name": {
           "type": "string",
-          "description": "The name or partial name of the Java types (classes, enums, and interfaces) to search for."
+          "description": "The class name, partial class name, or package name of the Java types (classes, enums, and interfaces) to search for."
         },
         "workspace": workspaceProperty
       },
@@ -34,11 +34,18 @@ export const initialTools = [
           "type": "string",
           "description": "The fully qualified name (FQN) of the Java type to retrieve its source code."
         },
+        "workspace": workspaceProperty,
+        "methodNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of method names to filter. If provided, only the specified methods will be shown, other methods will be hidden while preserving the rest of the class content."
+        },
         "uriPath": {
           "type": "string",
           "description": "The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri."
-        },
-        "workspace": workspaceProperty
+        }
       },
       "required": [
         "fullyQualifiedName","workspace"

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { waitForJavaLspReady } from "../utils/java-lsp";
 
 export const searchJavaTypesSchema = z.object({
-  name: z.string().describe("The name or partial name of the Java types (classes, enums, and interfaces) to search for."),
+  name: z.string().describe("The class name, partial class name, or package name of the Java types (classes, enums, and interfaces) to search for."),
   workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise.")
 })
 
