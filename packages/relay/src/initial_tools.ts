@@ -7,7 +7,7 @@ const workspaceProperty = {
 export const initialTools = [
   {
     "name": "searchJavaTypes",
-    "description": "search for Java types (classes, enums, and interfaces) by their name or partial name.\nThe search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK.\nThe result will return a list of fully qualified names of all matching Java types.",
+    "description": "search for Java types (classes, enums, and interfaces) by their name or partial name. \nThe search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. \nThe result will return a list of fully qualified names of all matching Java types.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -18,7 +18,8 @@ export const initialTools = [
         "workspace": workspaceProperty
       },
       "required": [
-        "name","workspace"
+        "name",
+        "workspace"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
@@ -48,7 +49,8 @@ export const initialTools = [
         }
       },
       "required": [
-        "fullyQualifiedName","workspace"
+        "fullyQualifiedName",
+        "workspace"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"

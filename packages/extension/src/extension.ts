@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { BidiHttpTransport } from './bidi-http-transport';
 import { registerVSCodeCommands } from './commands';
 import { createMcpServer, extensionDisplayName } from './mcp-server';
-import { DIFF_VIEW_URI_SCHEME } from './utils/DiffViewProvider';
 import { initLogger } from './utils/logger';
 import { findAvailablePort, registerWorkspace, unregisterWorkspace } from './utils/router-table';
 
@@ -30,33 +29,21 @@ export const activate = async (context: vscode.ExtensionContext) => {
     if (port === undefined) {
       port = await findAvailablePort();
     }
-    
+
     outputChannel.appendLine(`DEBUG: Starting MCP Server on port ${port}...`);
     transport = new BidiHttpTransport(port, outputChannel, currentWorkspace);
 
     await mcpServer.connect(transport); // connect calls transport.start().
-    
+
     // Get the actual port (may differ from requested port if there was a conflict)
     currentPort = transport.getActualPort() ?? port;
-    
+
     // Register workspace in router table with actual port
     if (currentWorkspace) {
       await registerWorkspace(currentWorkspace, currentPort, process.pid);
       outputChannel.appendLine(`Registered workspace ${currentWorkspace} with port ${currentPort}`);
     }
   }
-
-  // Register Diff View Provider for file comparison functionality
-  const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
-    provideTextDocumentContent(uri: vscode.Uri): string {
-      return Buffer.from(uri.query, "base64").toString("utf-8");
-    }
-  })();
-
-  // DiffViewProvider の URI スキームを mcp-diff に変更
-  context.subscriptions.push(
-    vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider),
-  );
 
   // Start server with dynamic port allocation (prioritizing 60100)
   try {

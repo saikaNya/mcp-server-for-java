@@ -173,16 +173,19 @@ export function createMcpServer(_outputChannel: vscode.OutputChannel): McpServer
 
 function registerTools(mcpServer: ToolRegistry) {
 
-   // Register the "searchJavaTypes" tool
-   mcpServer.tool(
+  // Register the "searchJavaTypes" tool
+  mcpServer.tool(
     'searchJavaTypes',
     dedent`
-      search for Java types (classes, enums, and interfaces) by their name or partial name. 
-      The search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. 
-      The result will return a list of fully qualified names of all matching Java types.
+		Searches for Java types (classes, interfaces, and enums) by full name, partial name, or package name.  
+		The search scope includes:
+		- Project source code  
+		- External dependencies (libraries and frameworks)  
+		- JDK source code  
+		Returns a list of fully qualified names (FQNs) of all matching types.
     `.trim(),
     searchJavaTypesSchema.shape,
-    async (params) => {   
+    async (params) => {
       const result = await searchJavaTypesTool(params);
       return {
         content: result.content.map(item => ({
@@ -198,11 +201,14 @@ function registerTools(mcpServer: ToolRegistry) {
   mcpServer.tool(
     'getSourceCodeByFQN',
     dedent`
-      Retrieves the source code definition of a Java type (class, enum, or interface) by its fully qualified name (FQN).
-      The search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK. 
+	Given a fully qualified name (FQN), returns the source code definition of the corresponding Java type (class, interface, or enum).
+	The search includes:
+	- Project source code
+	- External dependencies (libraries and frameworks) 
+	- JDK source code
     `.trim(),
     getSourceCodeByFQNSchema.shape,
-    async (params) => {   
+    async (params) => {
       const result = await getSourceCodeByFQNTool(params);
       return {
         content: result.content.map(item => ({
