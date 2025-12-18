@@ -176,16 +176,10 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
                 normalizedUriPath = '/' + normalizedUriPath;
             }
 
-            // 检测是否为 Windows 路径（包含盘符如 /c: 或 /C:）
-            const isWindowsPath = /^\/[a-zA-Z]:/.test(normalizedUriPath);
-
             const matchByUri = exactMatches.find(symbol => {
                 const symbolPath = symbol.location.uri.path;
-                if (isWindowsPath) {
-                    // Windows 路径忽略大小写
-                    return symbolPath.toLowerCase() === normalizedUriPath.toLowerCase();
-                }
-                return symbolPath === normalizedUriPath;
+                // 路径忽略大小写
+                return symbolPath.toLowerCase() === normalizedUriPath.toLowerCase();
             });
             if (matchByUri) {
                 exactMatch = matchByUri;
@@ -217,10 +211,36 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             };
         }
 
+        // 判断是否为项目源代码，如果是则使用相对路径
+        let displayPath = exactMatch.location.uri.path;
+        debug(`[getSourceCodeByFQN] location.uri.path: ${displayPath}`);
+
+        // 使用 getWorkspaceFolder 获取文件所在的工作区，支持多工作区场景
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(exactMatch.location.uri);
+        if (workspaceFolder) {
+            const workspacePath = workspaceFolder.uri.path;
+            debug(`[getSourceCodeByFQN] workspacePath: ${workspacePath}`);
+            const uriPath = exactMatch.location.uri.path;
+
+            // 忽略大小写比较
+            const uriPathForCompare = uriPath.toLowerCase();
+            const workspaceForCompare = workspacePath.toLowerCase();
+
+            if (uriPathForCompare.startsWith(workspaceForCompare)) {
+                // 项目源代码，使用相对路径
+                displayPath = uriPath.substring(workspacePath.length);
+                // 确保相对路径不以 / 开头
+                if (displayPath.startsWith('/')) {
+                    displayPath = displayPath.substring(1);
+                }
+            }
+        }
+        debug(`[getSourceCodeByFQN] displayPath: ${displayPath}`);
+
         return {
             content: [{
                 type: 'text',
-                text: `\`\`\`java:${exactMatch.location.uri.path}
+                text: `\`\`\`java:${displayPath}
 ${sourceCode}
 \`\`\``
             }]
