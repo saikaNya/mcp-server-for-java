@@ -15,7 +15,7 @@ export function initLogger(outputChannel: vscode.OutputChannel): void {
 export function log(message: string): void {
     const timestamp = new Date().toISOString();
     const formattedMessage = `[${timestamp}] ${message}`;
-    
+
     if (_outputChannel) {
         _outputChannel.appendLine(formattedMessage);
     } else {
@@ -26,8 +26,13 @@ export function log(message: string): void {
 
 /**
  * 输出调试日志
+ * 仅在 mcpServer.enableDebugInfo 配置开启时输出
  */
 export function debug(message: string): void {
+    const enableDebugInfo = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableDebugInfo', false);
+    if (!enableDebugInfo) {
+        return;
+    }
     log(`[DEBUG] ${message}`);
 }
 

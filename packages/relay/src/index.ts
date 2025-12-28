@@ -13,14 +13,16 @@ const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
 const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
-const RELAY_VERSION = '0.0.8';
+const RELAY_VERSION = '0.0.9';
 
 class MCPRelay {
   private mcpServer: McpServer;
   private defaultServerUrl: string;
-  
-  constructor(readonly baseServerUrl: string) {
+  private client?: string;
+
+  constructor(readonly baseServerUrl: string, client?: string) {
     this.defaultServerUrl = baseServerUrl;
+    this.client = client;
     this.mcpServer = new McpServer({
       name: 'vscode-as-mcp',
       version: '0.0.1',
@@ -104,11 +106,11 @@ class MCPRelay {
         // Extract workspace parameter from tool arguments
         const args = request.params.arguments as Record<string, unknown> | undefined;
         const workspace = args?.workspace as string | undefined;
-        
+
         // Get server URL based on workspace parameter
         const serverUrl = await this.getServerUrl(workspace);
         console.error(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
-        
+
         const response = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
           method: request.method,
@@ -116,6 +118,7 @@ class MCPRelay {
           id: Math.floor(Math.random() * 1000000),
         } as JSONRPCRequest), {
           'X-Relay-Version': RELAY_VERSION,
+          ...(this.client && { 'X-MCP-Client': this.client }),
         });
         const parsedResponse = response as JSONRPCResponse;
         return parsedResponse.result as any;
@@ -147,11 +150,11 @@ class MCPRelay {
       if (port) {
         return `http://localhost:${port}`;
       }
-      
+
       // Try to find a matching workspace by partial path match
       const workspaces = await listWorkspaces();
       const normalizedInput = normalizeWorkspacePath(workspace);
-      
+
       for (const entry of workspaces) {
         const normalizedEntry = normalizeWorkspacePath(entry.workspace);
         // Check if input contains the workspace path or vice versa
@@ -159,7 +162,7 @@ class MCPRelay {
           return `http://localhost:${entry.port}`;
         }
       }
-      
+
       console.error(`No server found for workspace: ${workspace}, using default`);
       return this.defaultServerUrl;
     } catch (err) {
@@ -250,20 +253,24 @@ class MCPRelay {
 function parseArgs() {
   const args = process.argv.slice(2);
   let serverUrl = 'http://localhost:60100';
+  let client: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--server-url' && i + 1 < args.length) {
       serverUrl = args[i + 1];
       i++;
+    } else if (args[i] === '--client' && i + 1 < args.length) {
+      client = args[i + 1];
+      i++;
     }
   }
 
-  return { serverUrl };
+  return { serverUrl, client };
 }
 
 try {
-  const { serverUrl } = parseArgs();
-  const relay = new MCPRelay(serverUrl);
+  const { serverUrl, client } = parseArgs();
+  const relay = new MCPRelay(serverUrl, client);
   await relay.start();
 } catch (err) {
   console.error(`Fatal error: ${(err as Error).message}`);

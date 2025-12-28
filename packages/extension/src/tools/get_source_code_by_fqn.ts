@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import { z } from "zod";
+import { getCurrentIDE } from "../utils/detect-ide";
 import { waitForJavaLspReady } from "../utils/java-lsp";
 import { debug } from "../utils/logger";
+import { getClient } from "../utils/request-context";
 
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
@@ -170,16 +172,15 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         // 如果提供了 uriPath，则用它来进一步筛选
         let exactMatch = exactMatches[0];
         if (params.uriPath && exactMatches.length > 1) {
-            // 标准化 uriPath：如果不是以 / 开头，则添加 /
-            let normalizedUriPath = params.uriPath;
-            if (!normalizedUriPath.startsWith('/')) {
-                normalizedUriPath = '/' + normalizedUriPath;
-            }
+            let normalizedUriPath = params.uriPath.replace(/\\/g, '/')
+                .replace(/\/+$/, '')
+                .toLowerCase();
 
             const matchByUri = exactMatches.find(symbol => {
                 const symbolPath = symbol.location.uri.path;
                 // 路径忽略大小写
-                return symbolPath.toLowerCase() === normalizedUriPath.toLowerCase();
+                return symbolPath.toLowerCase() === normalizedUriPath ||
+                    symbolPath.toLowerCase().endsWith(normalizedUriPath);
             });
             if (matchByUri) {
                 exactMatch = matchByUri;
@@ -189,6 +190,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         // 获取源代码
         const document = await vscode.workspace.openTextDocument(exactMatch.location.uri);
         let sourceCode = document.getText();
+        const lineCount = document.lineCount;
 
         // 如果指定了方法名列表，则使用 LSP 过滤只保留指定的方法
         if (params.methodNames && params.methodNames.length > 0) {
@@ -237,12 +239,29 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         }
         debug(`[getSourceCodeByFQN] displayPath: ${displayPath}`);
 
+        // 判断是否使用 Cursor 代码格式
+        const client = getClient();
+        const isCursorClient = client
+            ? client.toLowerCase() === 'cursor'
+            : getCurrentIDE() === 'cursor';
+
+        let formattedCode: string;
+        if (isCursorClient) {
+            // Cursor 格式: ```lineStart:lineEnd:displayPath
+            formattedCode = `\`\`\`1:${lineCount}:${displayPath}
+${sourceCode}
+\`\`\``;
+        } else {
+            // 默认格式: ```java:displayPath
+            formattedCode = `\`\`\`java:${displayPath}
+${sourceCode}
+\`\`\``;
+        }
+
         return {
             content: [{
                 type: 'text',
-                text: `\`\`\`java:${displayPath}
-${sourceCode}
-\`\`\``
+                text: formattedCode
             }]
         };
 

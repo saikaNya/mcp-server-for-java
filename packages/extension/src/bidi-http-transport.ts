@@ -3,6 +3,7 @@ import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import * as http from 'node:http';
 import * as vscode from 'vscode';
+import { RequestContext, requestContextStorage } from './utils/request-context';
 import { unregisterWorkspace } from './utils/router-table';
 
 const MIN_RELAY_VERSION = '0.0.2';
@@ -79,61 +80,69 @@ export class BidiHttpTransport implements Transport {
         this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
       }
 
-      try {
+      // 从 header 中提取上下文信息
+      const context: RequestContext = {
+        client: req.headers['x-mcp-client'] as string | undefined,
+      };
 
-        // Check relay version for tools/call requests
-        const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
-        if ('method' in message && message.method === 'tools/call' && enableVersionCheck !== false) {
-          const relayVersion = req.headers['x-relay-version'] as string | undefined;
-          if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
-            const now = Date.now();
-            if (!relayVersion) {
-              this.outputChannel.appendLine(`Warning: Relay version is missing， (minimum required: ${MIN_RELAY_VERSION})`);
+      // 使用 AsyncLocalStorage 包装请求处理，使上下文在整个调用链中可用
+      await requestContextStorage.run(context, async () => {
+        try {
+
+          // Check relay version for tools/call requests
+          const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
+          if ('method' in message && message.method === 'tools/call' && enableVersionCheck !== false) {
+            const relayVersion = req.headers['x-relay-version'] as string | undefined;
+            if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
+              const now = Date.now();
+              if (!relayVersion) {
+                this.outputChannel.appendLine(`Warning: Relay version is missing， (minimum required: ${MIN_RELAY_VERSION})`);
+              }
+              else {
+                this.outputChannel.appendLine(`Warning: Relay version ${relayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
+              }
+
+
+              // Only show warning if cooldown period has passed
+              if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
+                lastVersionWarningTime = now;
+                const warningMessage = `mcp server configuration is not correct or outdated. Click "View Extension" to see the solution. | MCP 服务配置不正确或过旧 ，点击"View Extension"查看解决方案。`;
+
+                vscode.window.showWarningMessage(
+                  warningMessage,
+                  'View Extension'
+                ).then(selection => {
+                  if (selection === 'View Extension') {
+                    vscode.commands.executeCommand('extension.open', 'saika.mcp-server-for-java');
+                  }
+                });
+              }
             }
-            else {
-              this.outputChannel.appendLine(`Warning: Relay version ${relayVersion} is outdated (minimum required: ${MIN_RELAY_VERSION})`);
-            }
+          }
 
-
-            // Only show warning if cooldown period has passed
-            if (now - lastVersionWarningTime > VERSION_WARNING_COOLDOWN_MS) {
-              lastVersionWarningTime = now;
-              const warningMessage = `mcp server configuration is not correct or outdated. Click "View Extension" to see the solution. | MCP 服务配置不正确或过旧 ，点击"View Extension"查看解决方案。`;
-
-              vscode.window.showWarningMessage(
-                warningMessage,
-                'View Extension'
-              ).then(selection => {
-                if (selection === 'View Extension') {
-                  vscode.commands.executeCommand('extension.open', 'saika.mcp-server-for-java');
-                }
+          if (this.onmessage) {
+            if ('id' in message) {
+              // Create a new promise for the response
+              const responsePromise = new Promise<JSONRPCMessage>((resolve) => {
+                this.pendingResponses.set(message.id, resolve);
               });
+              // Handle the request and wait for response
+              this.onmessage(message);
+              const resp = await responsePromise;
+              res.send(resp);
+            } else {
+              // Handle the request without waiting for response
+              this.onmessage(message);
+              res.send('{ "success": true }');
             }
-          }
-        }
-
-        if (this.onmessage) {
-          if ('id' in message) {
-            // Create a new promise for the response
-            const responsePromise = new Promise<JSONRPCMessage>((resolve) => {
-              this.pendingResponses.set(message.id, resolve);
-            });
-            // Handle the request and wait for response
-            this.onmessage(message);
-            const resp = await responsePromise;
-            res.send(resp);
           } else {
-            // Handle the request without waiting for response
-            this.onmessage(message);
-            res.send('{ "success": true }');
+            res.status(500).send('No message handler');
           }
-        } else {
-          res.status(500).send('No message handler');
+        } catch (err) {
+          this.outputChannel.appendLine('Error handling message: ' + err);
+          res.status(500).send('Internal Server Error');
         }
-      } catch (err) {
-        this.outputChannel.appendLine('Error handling message: ' + err);
-        res.status(500).send('Internal Server Error');
-      }
+      });
     });
 
     // Try to listen on the specified port

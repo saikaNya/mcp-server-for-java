@@ -40,6 +40,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable relay version update check and notification. Set to false to disable version warnings."
+        },
+        "mcpServer.enableDebugInfo": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug log output. When enabled, detailed debug information will be logged to the output channel."
         }
       }
     }
