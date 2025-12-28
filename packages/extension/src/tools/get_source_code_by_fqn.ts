@@ -69,8 +69,52 @@ async function getMethodRangesFromLsp(document: vscode.TextDocument): Promise<Me
     return methods;
 }
 
+interface MethodLineInfo {
+    name: string;
+    startLine: number; // 1-based line number
+    endLine: number;   // 1-based line number
+    startOffset: number;
+    endOffset: number;
+}
+
+/**
+ * 获取方法的行号信息
+ * 注意：startOffset 会被调整到行首，以保留方法第一行的缩进
+ */
+function getMethodLineInfo(document: vscode.TextDocument, methods: MethodRange[]): MethodLineInfo[] {
+    return methods.map(method => {
+        const startPos = document.positionAt(method.startOffset);
+        const endPos = document.positionAt(method.endOffset);
+
+        // 将 startOffset 调整到行首，以保留方法第一行的完整缩进
+        const lineStartPos = new vscode.Position(startPos.line, 0);
+        const adjustedStartOffset = document.offsetAt(lineStartPos);
+
+        return {
+            name: method.name,
+            startLine: startPos.line + 1, // 转为 1-based
+            endLine: endPos.line + 1,     // 转为 1-based
+            startOffset: adjustedStartOffset, // 使用调整到行首的偏移量
+            endOffset: method.endOffset
+        };
+    });
+}
+
+/**
+ * 为代码行添加行号前缀
+ */
+function addLineNumbers(code: string, startLine: number, lineNumberWidth: number): string {
+    const lines = code.split('\n');
+    return lines.map((line, index) => {
+        const lineNum = startLine + index;
+        const paddedLineNum = String(lineNum).padStart(lineNumberWidth, ' ');
+        return `${paddedLineNum}|${line}`;
+    }).join('\n');
+}
+
 /**
  * 根据方法名列表过滤源代码，只保留指定的方法（使用 LSP 提供的范围信息）
+ * 保留的方法每行会添加原始行号前缀
  */
 async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: string, methodNames: string[]): Promise<string> {
     debug(`[filterMethodsWithLsp] Filtering methods: ${methodNames.join(', ')}`);
@@ -83,6 +127,22 @@ async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: s
 
     debug(`[filterMethodsWithLsp] Found ${methods.length} methods, filtering...`);
 
+    // 获取方法的行号信息
+    const methodLineInfos = getMethodLineInfo(document, methods);
+
+    // 找出需要保留的方法
+    const keptMethods = methodLineInfos.filter(m => methodNames.includes(m.name));
+
+    if (keptMethods.length === 0) {
+        debug(`[filterMethodsWithLsp] No matching methods found`);
+        // 没有匹配的方法，返回不包含任何方法的类结构
+    }
+
+    // 计算行号最大宽度（用于对齐）
+    const maxLineNumber = Math.max(...keptMethods.map(m => m.endLine), 1);
+    const lineNumberWidth = String(maxLineNumber).length;
+    debug(`[filterMethodsWithLsp] Max line number: ${maxLineNumber}, width: ${lineNumberWidth}`);
+
     // 找到所有方法的最大结束位置
     const maxEndOffset = Math.max(...methods.map(m => m.endOffset));
 
@@ -90,13 +150,13 @@ async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: s
     const classTail = sourceCode.substring(maxEndOffset);
     debug(`[filterMethodsWithLsp] Preserved class tail (${classTail.length} chars): ${classTail.substring(0, 50).replace(/\n/g, '\\n')}...`);
 
-    // 按位置从后向前排序，这样删除时不会影响前面的索引
-    const sortedMethods = [...methods].sort((a, b) => b.startOffset - a.startOffset);
+    // 按位置从后向前排序，这样处理时不会影响前面的索引
+    const sortedMethodInfos = [...methodLineInfos].sort((a, b) => b.startOffset - a.startOffset);
 
     // 只处理到最后一个方法结束位置之前的内容
     let result = sourceCode.substring(0, maxEndOffset);
 
-    for (const method of sortedMethods) {
+    for (const method of sortedMethodInfos) {
         if (!methodNames.includes(method.name)) {
             debug(`[filterMethodsWithLsp] Removing method: ${method.name}`);
             // 删除不匹配的方法
@@ -109,7 +169,16 @@ async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: s
 
             result = trimmedBefore + trimmedAfter;
         } else {
-            debug(`[filterMethodsWithLsp] Keeping method: ${method.name}`);
+            debug(`[filterMethodsWithLsp] Keeping method with line numbers: ${method.name} (lines ${method.startLine}-${method.endLine})`);
+            // 保留的方法，添加行号前缀
+            const beforeMethod = result.substring(0, method.startOffset);
+            const methodCode = result.substring(method.startOffset, method.endOffset);
+            const afterMethod = result.substring(method.endOffset);
+
+            // 为方法代码添加行号
+            const methodWithLineNumbers = addLineNumbers(methodCode, method.startLine, lineNumberWidth);
+
+            result = beforeMethod + methodWithLineNumbers + afterMethod;
         }
     }
 
