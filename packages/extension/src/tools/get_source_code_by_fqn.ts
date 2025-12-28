@@ -217,6 +217,7 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
         let displayPath = exactMatch.location.uri.path;
         debug(`[getSourceCodeByFQN] location.uri.path: ${displayPath}`);
 
+        let isProjectSource = false;
         // 使用 getWorkspaceFolder 获取文件所在的工作区，支持多工作区场景
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(exactMatch.location.uri);
         if (workspaceFolder) {
@@ -235,8 +236,10 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
                 if (displayPath.startsWith('/')) {
                     displayPath = displayPath.substring(1);
                 }
+                isProjectSource = true;
             }
         }
+
         debug(`[getSourceCodeByFQN] displayPath: ${displayPath}`);
 
         // 判断是否使用 Cursor 代码格式
@@ -246,8 +249,8 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
             : getCurrentIDE() === 'cursor';
 
         let formattedCode: string;
-        if (isCursorClient) {
-            // Cursor 格式: ```lineStart:lineEnd:displayPath
+        if (isCursorClient && isProjectSource) {
+            // Cursor 格式: ```startLine:endLine:displayPath
             formattedCode = `\`\`\`1:${lineCount}:${displayPath}
 ${sourceCode}
 \`\`\``;
