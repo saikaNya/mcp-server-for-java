@@ -155,40 +155,55 @@ async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: s
 
     // 只处理到最后一个方法结束位置之前的内容
     let result = sourceCode.substring(0, maxEndOffset);
+    debug(`[filterMethodsWithLsp] Initial result length: ${result.length}, maxEndOffset: ${maxEndOffset}`);
+    debug(`[filterMethodsWithLsp] sourceCode length: ${sourceCode.length}`);
+    debug(`[filterMethodsWithLsp] Initial result (first 200 chars): ${result.substring(0, 200).replace(/\n/g, '\\n')}`);
 
     for (const method of sortedMethodInfos) {
+        debug(`[filterMethodsWithLsp] Processing method: ${method.name}, startOffset: ${method.startOffset}, endOffset: ${method.endOffset}, current result length: ${result.length}`);
+
         if (!methodNames.includes(method.name)) {
             debug(`[filterMethodsWithLsp] Removing method: ${method.name}`);
             // 删除不匹配的方法
             const beforeMethod = result.substring(0, method.startOffset);
             const afterMethod = result.substring(method.endOffset);
+            debug(`[filterMethodsWithLsp] beforeMethod length: ${beforeMethod.length}, afterMethod length: ${afterMethod.length}`);
 
             // 清理多余的空行
             const trimmedBefore = beforeMethod.replace(/\n\s*$/, '\n');
             const trimmedAfter = afterMethod.replace(/^\s*\n/, '\n');
+            debug(`[filterMethodsWithLsp] trimmedBefore length: ${trimmedBefore.length}, trimmedAfter length: ${trimmedAfter.length}`);
 
             result = trimmedBefore + trimmedAfter;
+            debug(`[filterMethodsWithLsp] After removing ${method.name}, result length: ${result.length}`);
         } else {
             debug(`[filterMethodsWithLsp] Keeping method with line numbers: ${method.name} (lines ${method.startLine}-${method.endLine})`);
             // 保留的方法，添加行号前缀
             const beforeMethod = result.substring(0, method.startOffset);
             const methodCode = result.substring(method.startOffset, method.endOffset);
             const afterMethod = result.substring(method.endOffset);
+            debug(`[filterMethodsWithLsp] beforeMethod length: ${beforeMethod.length}, methodCode length: ${methodCode.length}, afterMethod length: ${afterMethod.length}`);
+            debug(`[filterMethodsWithLsp] methodCode content: ${methodCode.substring(0, 100).replace(/\n/g, '\\n')}...`);
 
             // 为方法代码添加行号
             const methodWithLineNumbers = addLineNumbers(methodCode, method.startLine, lineNumberWidth);
+            debug(`[filterMethodsWithLsp] methodWithLineNumbers length: ${methodWithLineNumbers.length}`);
 
             result = beforeMethod + methodWithLineNumbers + afterMethod;
+            debug(`[filterMethodsWithLsp] After keeping ${method.name}, result length: ${result.length}`);
         }
     }
 
     // 重新添加类的尾部内容
+    debug(`[filterMethodsWithLsp] Before adding classTail, result length: ${result.length}`);
+    debug(`[filterMethodsWithLsp] Result before classTail (last 100 chars): ...${result.substring(result.length - 100).replace(/\n/g, '\\n')}`);
     result = result + classTail;
 
     // 清理连续的多个空行为最多两个
     result = result.replace(/\n{3,}/g, '\n\n');
 
-    debug(`[filterMethodsWithLsp] Filtering complete`);
+    debug(`[filterMethodsWithLsp] Filtering complete, final result length: ${result.length}`);
+    debug(`[filterMethodsWithLsp] Final result (first 300 chars): ${result.substring(0, 300).replace(/\n/g, '\\n')}`);
     return result;
 }
 
