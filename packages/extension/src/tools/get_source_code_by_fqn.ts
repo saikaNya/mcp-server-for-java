@@ -100,20 +100,15 @@ function getMethodLineInfo(document: vscode.TextDocument, methods: MethodRange[]
     });
 }
 
-/**
- * 为代码行添加行号前缀
- */
-function addLineNumbers(code: string, startLine: number, lineNumberWidth: number): string {
-    const lines = code.split('\n');
-    return lines.map((line, index) => {
-        const lineNum = startLine + index;
-        const paddedLineNum = String(lineNum).padStart(lineNumberWidth, ' ');
-        return `${paddedLineNum}|${line}`;
-    }).join('\n');
-}
+// 行状态枚举
+const LineState = {
+    PENDING: 1,   // 待定（保持原样）
+    KEEP: 2,      // 保留（添加行号）
+    DELETE: 3     // 删除
+} as const;
 
 /**
- * 根据方法名列表过滤源代码，只保留指定的方法（使用 LSP 提供的范围信息）
+ * 根据方法名列表过滤源代码，只保留指定的方法（使用基于行的状态管理）
  * 保留的方法每行会添加原始行号前缀
  */
 async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: string, methodNames: string[]): Promise<string> {
@@ -130,80 +125,105 @@ async function filterMethodsWithLsp(document: vscode.TextDocument, sourceCode: s
     // 获取方法的行号信息
     const methodLineInfos = getMethodLineInfo(document, methods);
 
-    // 找出需要保留的方法
+    // 分离需要保留和需要删除的方法
     const keptMethods = methodLineInfos.filter(m => methodNames.includes(m.name));
+    const removedMethods = methodLineInfos.filter(m => !methodNames.includes(m.name));
+
+    debug(`[filterMethodsWithLsp] Methods to keep: ${keptMethods.map(m => `${m.name}(${m.startLine}-${m.endLine})`).join(', ')}`);
+    debug(`[filterMethodsWithLsp] Methods to remove: ${removedMethods.map(m => `${m.name}(${m.startLine}-${m.endLine})`).join(', ')}`);
 
     if (keptMethods.length === 0) {
         debug(`[filterMethodsWithLsp] No matching methods found`);
-        // 没有匹配的方法，返回不包含任何方法的类结构
+        throw new Error(`No matching methods found for: ${methodNames.join(', ')}`);
     }
+
+    // 将源代码按行分割
+    const lines = sourceCode.split('\n');
+    const totalLines = lines.length;
+
+    // 创建行状态数组，索引0不使用（行号是1-based）
+    const lineStates: number[] = new Array(totalLines + 1).fill(LineState.PENDING);
+
+    // 第一步：标记所有需要保留的方法的行为 KEEP
+    for (const method of keptMethods) {
+        debug(`[filterMethodsWithLsp] Marking lines ${method.startLine}-${method.endLine} as KEEP for method: ${method.name}`);
+        for (let line = method.startLine; line <= method.endLine; line++) {
+            lineStates[line] = LineState.KEEP;
+        }
+    }
+
+    // 第二步：处理需要删除的方法
+    for (const method of removedMethods) {
+        // 检查这个要删除的方法是否完全包含某个保留的方法
+        const containsKeptMethod = keptMethods.some(kept =>
+            method.startLine <= kept.startLine && method.endLine >= kept.endLine
+        );
+
+        if (containsKeptMethod) {
+            debug(`[filterMethodsWithLsp] Method ${method.name}(${method.startLine}-${method.endLine}) contains a kept method, skipping deletion`);
+            continue;
+        }
+
+        // 标记该方法范围内的行为 DELETE（但不覆盖已标记为 KEEP 的行）
+        debug(`[filterMethodsWithLsp] Marking lines ${method.startLine}-${method.endLine} as DELETE for method: ${method.name}`);
+        for (let line = method.startLine; line <= method.endLine; line++) {
+            if (lineStates[line] !== LineState.KEEP) {
+                lineStates[line] = LineState.DELETE;
+            }
+        }
+    }
+
+    // 统计各状态的行数
+    let pendingCount = 0, keepCount = 0, deleteCount = 0;
+    for (let i = 1; i <= totalLines; i++) {
+        if (lineStates[i] === LineState.PENDING) pendingCount++;
+        else if (lineStates[i] === LineState.KEEP) keepCount++;
+        else if (lineStates[i] === LineState.DELETE) deleteCount++;
+    }
+    debug(`[filterMethodsWithLsp] Line states - PENDING: ${pendingCount}, KEEP: ${keepCount}, DELETE: ${deleteCount}`);
 
     // 计算行号最大宽度（用于对齐）
     const maxLineNumber = Math.max(...keptMethods.map(m => m.endLine), 1);
     const lineNumberWidth = String(maxLineNumber).length;
-    debug(`[filterMethodsWithLsp] Max line number: ${maxLineNumber}, width: ${lineNumberWidth}`);
+    debug(`[filterMethodsWithLsp] Line number width: ${lineNumberWidth}`);
 
-    // 找到所有方法的最大结束位置
-    const maxEndOffset = Math.max(...methods.map(m => m.endOffset));
+    // 第三步：根据状态处理每一行
+    const resultLines: string[] = [];
+    let consecutiveEmptyLines = 0;
 
-    // 保存类的尾部内容（最后一个方法之后的所有内容，包括类的结束大括号）
-    const classTail = sourceCode.substring(maxEndOffset);
-    debug(`[filterMethodsWithLsp] Preserved class tail (${classTail.length} chars): ${classTail.substring(0, 50).replace(/\n/g, '\\n')}...`);
+    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+        const state = lineStates[lineNum];
+        const line = lines[lineNum - 1]; // lines 数组是0-based
 
-    // 按位置从后向前排序，这样处理时不会影响前面的索引
-    const sortedMethodInfos = [...methodLineInfos].sort((a, b) => b.startOffset - a.startOffset);
+        if (state === LineState.DELETE) {
+            // 删除该行，不添加到结果
+            continue;
+        }
 
-    // 只处理到最后一个方法结束位置之前的内容
-    let result = sourceCode.substring(0, maxEndOffset);
-    debug(`[filterMethodsWithLsp] Initial result length: ${result.length}, maxEndOffset: ${maxEndOffset}`);
-    debug(`[filterMethodsWithLsp] sourceCode length: ${sourceCode.length}`);
-    debug(`[filterMethodsWithLsp] Initial result (first 200 chars): ${result.substring(0, 200).replace(/\n/g, '\\n')}`);
-
-    for (const method of sortedMethodInfos) {
-        debug(`[filterMethodsWithLsp] Processing method: ${method.name}, startOffset: ${method.startOffset}, endOffset: ${method.endOffset}, current result length: ${result.length}`);
-
-        if (!methodNames.includes(method.name)) {
-            debug(`[filterMethodsWithLsp] Removing method: ${method.name}`);
-            // 删除不匹配的方法
-            const beforeMethod = result.substring(0, method.startOffset);
-            const afterMethod = result.substring(method.endOffset);
-            debug(`[filterMethodsWithLsp] beforeMethod length: ${beforeMethod.length}, afterMethod length: ${afterMethod.length}`);
-
-            // 清理多余的空行
-            const trimmedBefore = beforeMethod.replace(/\n\s*$/, '\n');
-            const trimmedAfter = afterMethod.replace(/^\s*\n/, '\n');
-            debug(`[filterMethodsWithLsp] trimmedBefore length: ${trimmedBefore.length}, trimmedAfter length: ${trimmedAfter.length}`);
-
-            result = trimmedBefore + trimmedAfter;
-            debug(`[filterMethodsWithLsp] After removing ${method.name}, result length: ${result.length}`);
+        // 处理连续空行（最多保留2个）
+        if (line.trim() === '') {
+            consecutiveEmptyLines++;
+            if (consecutiveEmptyLines > 2) {
+                continue;
+            }
         } else {
-            debug(`[filterMethodsWithLsp] Keeping method with line numbers: ${method.name} (lines ${method.startLine}-${method.endLine})`);
-            // 保留的方法，添加行号前缀
-            const beforeMethod = result.substring(0, method.startOffset);
-            const methodCode = result.substring(method.startOffset, method.endOffset);
-            const afterMethod = result.substring(method.endOffset);
-            debug(`[filterMethodsWithLsp] beforeMethod length: ${beforeMethod.length}, methodCode length: ${methodCode.length}, afterMethod length: ${afterMethod.length}`);
-            debug(`[filterMethodsWithLsp] methodCode content: ${methodCode.substring(0, 100).replace(/\n/g, '\\n')}...`);
+            consecutiveEmptyLines = 0;
+        }
 
-            // 为方法代码添加行号
-            const methodWithLineNumbers = addLineNumbers(methodCode, method.startLine, lineNumberWidth);
-            debug(`[filterMethodsWithLsp] methodWithLineNumbers length: ${methodWithLineNumbers.length}`);
-
-            result = beforeMethod + methodWithLineNumbers + afterMethod;
-            debug(`[filterMethodsWithLsp] After keeping ${method.name}, result length: ${result.length}`);
+        if (state === LineState.KEEP) {
+            // 保留的行，添加行号前缀
+            const paddedLineNum = String(lineNum).padStart(lineNumberWidth, ' ');
+            resultLines.push(`${paddedLineNum}|${line}`);
+        } else {
+            // 待定的行，保持原样
+            resultLines.push(line);
         }
     }
 
-    // 重新添加类的尾部内容
-    debug(`[filterMethodsWithLsp] Before adding classTail, result length: ${result.length}`);
-    debug(`[filterMethodsWithLsp] Result before classTail (last 100 chars): ...${result.substring(result.length - 100).replace(/\n/g, '\\n')}`);
-    result = result + classTail;
-
-    // 清理连续的多个空行为最多两个
-    result = result.replace(/\n{3,}/g, '\n\n');
-
-    debug(`[filterMethodsWithLsp] Filtering complete, final result length: ${result.length}`);
+    const result = resultLines.join('\n');
+    debug(`[filterMethodsWithLsp] Filtering complete, result lines: ${resultLines.length}, result length: ${result.length}`);
     debug(`[filterMethodsWithLsp] Final result (first 300 chars): ${result.substring(0, 300).replace(/\n/g, '\\n')}`);
+
     return result;
 }
 
@@ -282,7 +302,18 @@ export async function getSourceCodeByFQNTool(params: z.infer<typeof getSourceCod
                 sourceCode = await filterMethodsWithLsp(document, sourceCode, params.methodNames);
             } catch (filterError) {
                 debug(`Failed to filter methods for ${fqn} (methods: ${params.methodNames.join(', ')}): ${filterError}`);
-                // 过滤失败时返回原始源代码
+                // 检查原始源代码是否包含任意一个方法名
+                const hasAnyMethod = params.methodNames.some(methodName => sourceCode.includes(methodName));
+                if (hasAnyMethod) {
+                    // 源代码中包含方法名，返回原始源代码
+                    debug(`[getSourceCodeByFQN] Found method name in source code, returning original source`);
+                } else {
+                    // 源代码中不包含任何方法名，返回错误
+                    return {
+                        content: [{ type: 'text', text: `Error filtering methods: ${filterError instanceof Error ? filterError.message : String(filterError)}` }],
+                        isError: true
+                    };
+                }
             }
         }
 
