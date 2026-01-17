@@ -110,6 +110,7 @@ class MCPRelay {
         // Get server URL based on workspace parameter
         const serverUrl = await this.getServerUrl(workspace);
         console.error(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
+        console.error(`Process PID: ${process.pid}, Parent PID: ${process.ppid}`);
 
         const response = await this.requestWithRetry(serverUrl, JSON.stringify({
           jsonrpc: '2.0',
@@ -269,6 +270,7 @@ function parseArgs() {
 }
 
 try {
+  console.error(`Relay starting - PID: ${process.pid}, Parent PID: ${process.ppid}`);
   const { serverUrl, client } = parseArgs();
   const relay = new MCPRelay(serverUrl, client);
   await relay.start();

@@ -78,6 +78,7 @@ export class BidiHttpTransport implements Transport {
       // 对于 tools/list 方法，不打印日志
       if (!('method' in message && message.method === 'tools/list')) {
         this.outputChannel.appendLine('Received message: ' + JSON.stringify(req.body));
+        this.outputChannel.appendLine(`Extension Process PID: ${process.pid}, Parent PID: ${process.ppid}`);
       }
 
       // 从 header 中提取上下文信息

@@ -1,0 +1,34 @@
+# 源代码目录（使用编译后的 dist 目录）
+src/**
+extension/**
+
+# 依赖和构建相关
+node_modules/**
+*.vsix
+
+# TypeScript 配置和构建文件
+tsconfig.json
+tsconfig.tsbuildinfo
+webpack.config.js
+build.js
+
+# Source maps（可选保留用于调试）
+**/*.map
+
+# 包管理文件
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# 开发和测试相关
+**/*.test.ts
+**/*.spec.ts
+.vscode/**
+.github/**
+
+# 其他
+.gitignore
+.eslintrc*
+.prettierrc*
+**/.DS_Store
+
