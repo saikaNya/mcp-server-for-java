@@ -135,7 +135,7 @@ export class SocketTransport implements Transport {
 
     // Extract context from headers
     const context: RequestContext = {
-      client: headers['x-mcp-client'],
+      client: headers['X-MCP-Client'],
     };
 
     // Use AsyncLocalStorage to wrap request handling
@@ -144,7 +144,7 @@ export class SocketTransport implements Transport {
         // Check relay version for tools/call requests
         const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
         if ('method' in message && message.method === 'tools/call' && enableVersionCheck !== false) {
-          const relayVersion = headers['x-relay-version'];
+          const relayVersion = headers['X-Relay-Version'];
           if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
             const now = Date.now();
             if (!relayVersion) {
