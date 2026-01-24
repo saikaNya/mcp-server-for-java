@@ -85,9 +85,140 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 **非常欢迎大家对插件的问题，bug或新功能建议进行反馈！** 🙇
 
 ## 更新日志
+- **0.0.5** 获取源码时，支持按方法名过滤
 - **0.0.4** 支持获取工作区中存在的全限定名相同但版本不同的类
 - **0.0.3** mcp指令执行在多个工作区自动路由，无需手动切换
 - **0.0.2** 修改了查询全限定名有时候会查出不符合条件的结果的bug
+
+## 架构说明
+
+### 整体架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MCP 客户端                                      │
+│                  (Claude Desktop / Cursor / Windsurf 等)                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ stdio (JSON-RPC)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Relay (vscode-to-mcp-server)                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  - 接收 MCP 客户端请求                                                │    │
+│  │  - 读取路由表，查找目标 Extension                                      │    │
+│  │  - 通过 Socket 转发请求到 Extension                                   │    │
+│  │  - 返回响应给 MCP 客户端                                              │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                   ┌────────────────┼────────────────┐
+                   │                │                │
+                   ▼                ▼                ▼
+          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+          │   Named Pipe │  │   Named Pipe │  │   Named Pipe │
+          │  (Windows)   │  │  (Windows)   │  │  (Windows)   │
+          │    或        │  │    或        │  │    或        │
+          │ Unix Socket  │  │ Unix Socket  │  │ Unix Socket  │
+          │   (其他)     │  │   (其他)     │  │   (其他)     │
+          └──────────────┘  └──────────────┘  └──────────────┘
+                   │                │                │
+                   ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VSCode/Cursor Extension 实例                            │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                        │
+│  │ 工作区 A    │   │ 工作区 B    │   │ 工作区 C    │   ...                  │
+│  │ PID: 12345  │   │ PID: 23456  │   │ PID: 34567  │                        │
+│  └─────────────┘   └─────────────┘   └─────────────┘                        │
+│         │                │                │                                  │
+│         ▼                ▼                ▼                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Java Language Server (JDT.LS)                     │    │
+│  │            搜索类型 / 获取源代码 / 解析 Java 项目                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 核心组件
+
+| 组件 | 包名 | 说明 |
+|------|------|------|
+| **Extension** | `packages/extension` | VSCode/Cursor 插件，提供 MCP 服务器功能 |
+| **Relay** | `packages/relay` | 命令行中继程序，桥接 MCP 客户端与 Extension |
+
+### Socket 通信机制
+
+#### 平台差异
+
+| 平台 | 通信方式 | 路径格式 |
+|------|----------|----------|
+| **Windows** | Named Pipe (命名管道) | `\\.\pipe\vscode-mcp-{pid}` |
+| **macOS/Linux** | Unix Domain Socket | `~/.vscode-mcp-sockets/{pid}.sock` |
+
+#### 路由表
+
+路由表文件存储在用户主目录：`~/.vscode-mcp-router-v2.json`
+
+```json
+{
+  "entries": [
+    {
+      "workspaces": ["d:\\project\\workspace-a"],
+      "pid": 12345,
+      "lastUpdated": 1700000000000
+    }
+  ]
+}
+```
+
+#### 通信协议
+
+- **格式**: JSON-RPC 2.0
+- **分隔符**: 换行符 `\n`
+- **超时**: 连接 5秒 / 请求 30秒
+
+#### 请求头
+
+| Header | 说明 |
+|--------|------|
+| `X-Relay-Version` | Relay 版本号，用于兼容性检查 |
+| `X-MCP-Client` | MCP 客户端标识 |
+
+### 数据流
+
+```
+1. MCP 客户端调用工具 (如 searchJavaTypes)
+                    │
+                    ▼
+2. Relay 接收 stdio 请求
+                    │
+                    ▼
+3. Relay 读取路由表，根据 workspacePaths 查找目标 PID
+                    │
+                    ▼
+4. Relay 通过 Socket 发送 JSON-RPC 请求到 Extension
+                    │
+                    ▼
+5. Extension 调用 Java Language Server 执行操作
+                    │
+                    ▼
+6. Extension 返回结果给 Relay
+                    │
+                    ▼
+7. Relay 返回结果给 MCP 客户端
+```
+
+### 关键文件
+
+| 文件 | 说明 |
+|------|------|
+| `extension/src/extension.ts` | 插件入口，初始化 MCP 服务器 |
+| `extension/src/mcp-server.ts` | MCP 服务器实现，注册工具 |
+| `extension/src/sock-transport.ts` | Socket 服务端传输层 |
+| `extension/src/utils/router-table.ts` | 路由表管理（读写） |
+| `relay/src/index.ts` | Relay 入口，请求转发 |
+| `relay/src/socket-client.ts` | Socket 客户端 |
+| `relay/src/router-table.ts` | 路由表读取（只读） |
 
 <h1 id="en-readme">MCP Server For Java</h1>
 
@@ -172,6 +303,137 @@ When you cannot find the class, class definition, or specific implementation of 
 **Feedback on issues, bugs, or suggestions for new features is highly welcomed!** 🙇
 
 ## Changelog
+- **0.0.5** Support filtering by method names when retrieving source code
 - **0.0.4** Support for retrieving classes with the same fully qualified name from multiple versions
 - **0.0.3** MCP commands auto-route to multiple workspaces without manual switching
 - **0.0.2** Fixed a bug where querying fully qualified names sometimes returned non-matching results
+
+## Architecture
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MCP Client                                      │
+│                  (Claude Desktop / Cursor / Windsurf, etc.)                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ stdio (JSON-RPC)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Relay (vscode-to-mcp-server)                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  - Receives MCP client requests                                      │    │
+│  │  - Reads router table to find target Extension                       │    │
+│  │  - Forwards requests to Extension via Socket                         │    │
+│  │  - Returns responses to MCP client                                   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                   ┌────────────────┼────────────────┐
+                   │                │                │
+                   ▼                ▼                ▼
+          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+          │   Named Pipe │  │   Named Pipe │  │   Named Pipe │
+          │  (Windows)   │  │  (Windows)   │  │  (Windows)   │
+          │     or       │  │     or       │  │     or       │
+          │ Unix Socket  │  │ Unix Socket  │  │ Unix Socket  │
+          │   (Others)   │  │   (Others)   │  │   (Others)   │
+          └──────────────┘  └──────────────┘  └──────────────┘
+                   │                │                │
+                   ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VSCode/Cursor Extension Instances                       │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                        │
+│  │ Workspace A │   │ Workspace B │   │ Workspace C │   ...                  │
+│  │ PID: 12345  │   │ PID: 23456  │   │ PID: 34567  │                        │
+│  └─────────────┘   └─────────────┘   └─────────────┘                        │
+│         │                │                │                                  │
+│         ▼                ▼                ▼                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Java Language Server (JDT.LS)                     │    │
+│  │          Search types / Get source code / Parse Java projects        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Core Components
+
+| Component | Package | Description |
+|-----------|---------|-------------|
+| **Extension** | `packages/extension` | VSCode/Cursor extension providing MCP server functionality |
+| **Relay** | `packages/relay` | CLI relay program bridging MCP client and Extension |
+
+### Socket Communication
+
+#### Platform Differences
+
+| Platform | Method | Path Format |
+|----------|--------|-------------|
+| **Windows** | Named Pipe | `\\.\pipe\vscode-mcp-{pid}` |
+| **macOS/Linux** | Unix Domain Socket | `~/.vscode-mcp-sockets/{pid}.sock` |
+
+#### Router Table
+
+Router table file is stored in user home directory: `~/.vscode-mcp-router-v2.json`
+
+```json
+{
+  "entries": [
+    {
+      "workspaces": ["d:\\project\\workspace-a"],
+      "pid": 12345,
+      "lastUpdated": 1700000000000
+    }
+  ]
+}
+```
+
+#### Communication Protocol
+
+- **Format**: JSON-RPC 2.0
+- **Delimiter**: Newline `\n`
+- **Timeout**: Connection 5s / Request 30s
+
+#### Request Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-Relay-Version` | Relay version for compatibility check |
+| `X-MCP-Client` | MCP client identifier |
+
+### Data Flow
+
+```
+1. MCP client calls a tool (e.g., searchJavaTypes)
+                    │
+                    ▼
+2. Relay receives stdio request
+                    │
+                    ▼
+3. Relay reads router table, finds target PID by workspacePaths
+                    │
+                    ▼
+4. Relay sends JSON-RPC request to Extension via Socket
+                    │
+                    ▼
+5. Extension calls Java Language Server to execute operation
+                    │
+                    ▼
+6. Extension returns result to Relay
+                    │
+                    ▼
+7. Relay returns result to MCP client
+```
+
+### Key Files
+
+| File | Description |
+|------|-------------|
+| `extension/src/extension.ts` | Extension entry point, initializes MCP server |
+| `extension/src/mcp-server.ts` | MCP server implementation, registers tools |
+| `extension/src/sock-transport.ts` | Socket server transport layer |
+| `extension/src/utils/router-table.ts` | Router table management (read/write) |
+| `relay/src/index.ts` | Relay entry point, request forwarding |
+| `relay/src/socket-client.ts` | Socket client |
+| `relay/src/router-table.ts` | Router table reading (read-only) |
