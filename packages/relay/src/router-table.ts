@@ -95,16 +95,18 @@ export async function findMatchingEntry(
   // Priority 1: Exact match
   for (const entry of entries) {
     const normalizedEntry = normalizeWorkspacePaths(entry.workspaces);
-    
+
     if (isSingle) {
       // For single workspace: entry should contain only this directory
       if (normalizedEntry.length === 1 && normalizedEntry[0] === normalizedInput[0]) {
+        console.error(`[Router] Priority 1 (Exact match): pid=${entry.pid}, workspaces=${JSON.stringify(entry.workspaces)}`);
         return entry;
       }
     } else {
       // For multiple workspaces: arrays should be exactly equal
       if (normalizedEntry.length === normalizedInput.length &&
-          normalizedEntry.every((p, i) => p === normalizedInput[i])) {
+        normalizedEntry.every((p, i) => p === normalizedInput[i])) {
+        console.error(`[Router] Priority 1 (Exact match): pid=${entry.pid}, workspaces=${JSON.stringify(entry.workspaces)}`);
         return entry;
       }
     }
@@ -113,6 +115,7 @@ export async function findMatchingEntry(
   // Priority 2: Parent PID match
   for (const entry of entries) {
     if (entry.pid === parentPid) {
+      console.error(`[Router] Priority 2 (Parent PID match): pid=${entry.pid}, workspaces=${JSON.stringify(entry.workspaces)}`);
       return entry;
     }
   }
@@ -120,15 +123,17 @@ export async function findMatchingEntry(
   // Priority 3: Contains match
   for (const entry of entries) {
     const normalizedEntry = normalizeWorkspacePaths(entry.workspaces);
-    
+
     if (isSingle) {
       // For single workspace: entry.workspaces should contain this directory
       if (normalizedEntry.includes(normalizedInput[0])) {
+        console.error(`[Router] Priority 3 (Contains match): pid=${entry.pid}, workspaces=${JSON.stringify(entry.workspaces)}`);
         return entry;
       }
     } else {
       // For multiple workspaces: entry.workspaces should contain any of the directories
       if (normalizedInput.some(p => normalizedEntry.includes(p))) {
+        console.error(`[Router] Priority 3 (Contains match): pid=${entry.pid}, workspaces=${JSON.stringify(entry.workspaces)}`);
         return entry;
       }
     }
