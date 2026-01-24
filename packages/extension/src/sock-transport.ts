@@ -1,7 +1,7 @@
-import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import * as net from 'net';
 import * as vscode from 'vscode';
+import { searchJavaTypesTool } from './tools/search_java_types';
+import { getSourceCodeByFQNTool } from './tools/get_source_code_by_fqn';
 import { RequestContext, requestContextStorage } from './utils/request-context';
 import { getSocketPath, ensureSocketDir, unregisterByPid, cleanupStaleSocketFile } from './utils/router-table';
 
@@ -28,16 +28,38 @@ function compareVersions(v1: string, v2: string): number {
 // Track last warning time to avoid spamming
 let lastVersionWarningTime = 0;
 
+// Tool name to handler mapping
+const toolHandlers: Record<string, (params: any) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>> = {
+  'searchJavaTypes': searchJavaTypesTool,
+  'getSourceCodeByFQN': getSourceCodeByFQNTool,
+};
+
+interface JSONRPCRequest {
+  jsonrpc: '2.0';
+  id: string | number;
+  method: string;
+  params?: {
+    name?: string;
+    arguments?: Record<string, unknown>;
+  };
+  headers?: Record<string, string>;
+}
+
+interface JSONRPCResponse {
+  jsonrpc: '2.0';
+  id: string | number;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
 /**
- * IPC Socket Transport for MCP Server.
+ * IPC Socket Server for MCP tools.
  * Uses Named Pipe on Windows, Unix Domain Socket on other platforms.
  */
-export class SocketTransport implements Transport {
-  onclose?: () => void;
-  onerror?: (error: Error) => void;
-  onmessage?: (message: JSONRPCMessage) => void;
-  
-  private pendingResponses = new Map<string | number, (resp: JSONRPCMessage) => void>();
+export class SocketServer {
   private server?: net.Server;
   private connections: Set<net.Socket> = new Set();
   private socketPath: string;
@@ -52,14 +74,14 @@ export class SocketTransport implements Transport {
   }
 
   /**
-   * Gets the PID this transport is associated with.
+   * Gets the PID this server is associated with.
    */
   getPid(): number {
     return this.pid;
   }
 
   /**
-   * Gets the socket path this transport is listening on.
+   * Gets the socket path this server is listening on.
    */
   getSocketPath(): string {
     return this.socketPath;
@@ -90,7 +112,7 @@ export class SocketTransport implements Transport {
             if (!line.trim()) continue;
             
             try {
-              const parsed = JSON.parse(line);
+              const parsed = JSON.parse(line) as JSONRPCRequest;
               await this.handleMessage(parsed, conn);
             } catch (err) {
               this.outputChannel.appendLine(`Error parsing JSON: ${err}`);
@@ -101,7 +123,6 @@ export class SocketTransport implements Transport {
         conn.on('error', (err) => {
           this.outputChannel.appendLine(`Socket connection error: ${err}`);
           this.connections.delete(conn);
-          this.onerror?.(err);
         });
 
         conn.on('close', () => {
@@ -122,16 +143,13 @@ export class SocketTransport implements Transport {
     });
   }
 
-  private async handleMessage(message: JSONRPCMessage & { headers?: Record<string, string> }, conn: net.Socket): Promise<void> {
+  private async handleMessage(message: JSONRPCRequest, conn: net.Socket): Promise<void> {
     // Extract headers if present (for relay version check and client info)
     const headers = message.headers || {};
     delete (message as any).headers; // Remove headers from the actual message
 
-    // Don't log for tools/list method
-    if (!('method' in message && message.method === 'tools/list')) {
-      this.outputChannel.appendLine('Received message: ' + JSON.stringify(message));
-      this.outputChannel.appendLine(`Extension Process PID: ${process.pid}, Parent PID: ${process.ppid}`);
-    }
+    this.outputChannel.appendLine('Received message: ' + JSON.stringify(message));
+    this.outputChannel.appendLine(`Extension Process PID: ${process.pid}, Parent PID: ${process.ppid}`);
 
     // Extract context from headers
     const context: RequestContext = {
@@ -143,7 +161,7 @@ export class SocketTransport implements Transport {
       try {
         // Check relay version for tools/call requests
         const enableVersionCheck = vscode.workspace.getConfiguration('mcpServer').get<boolean>('enableRelayVersionCheck');
-        if ('method' in message && message.method === 'tools/call' && enableVersionCheck !== false) {
+        if (message.method === 'tools/call' && enableVersionCheck !== false) {
           const relayVersion = headers['X-Relay-Version'];
           if (!relayVersion || compareVersions(relayVersion, MIN_RELAY_VERSION) < 0) {
             const now = Date.now();
@@ -170,53 +188,76 @@ export class SocketTransport implements Transport {
           }
         }
 
-        if (this.onmessage) {
-          if ('id' in message) {
-            // Create a new promise for the response
-            const responsePromise = new Promise<JSONRPCMessage>((resolve) => {
-              this.pendingResponses.set(message.id, resolve);
-            });
-            
-            // Handle the request and wait for response
-            this.onmessage(message);
-            const resp = await responsePromise;
-            
-            // Send response back through the socket
-            conn.write(JSON.stringify(resp) + '\n');
-          } else {
-            // Handle the request without waiting for response
-            this.onmessage(message);
-            conn.write(JSON.stringify({ success: true }) + '\n');
-          }
+        // Handle tools/call requests directly
+        if (message.method === 'tools/call') {
+          const response = await this.handleToolCall(message);
+          conn.write(JSON.stringify(response) + '\n');
         } else {
-          conn.write(JSON.stringify({ error: 'No message handler' }) + '\n');
+          // Unknown method
+          const errorResponse: JSONRPCResponse = {
+            jsonrpc: '2.0',
+            id: message.id,
+            error: {
+              code: -32601,
+              message: `Method not found: ${message.method}`
+            }
+          };
+          conn.write(JSON.stringify(errorResponse) + '\n');
         }
       } catch (err) {
         this.outputChannel.appendLine('Error handling message: ' + err);
-        conn.write(JSON.stringify({ error: 'Internal Server Error' }) + '\n');
+        const errorResponse: JSONRPCResponse = {
+          jsonrpc: '2.0',
+          id: message.id,
+          error: {
+            code: -32603,
+            message: 'Internal Server Error'
+          }
+        };
+        conn.write(JSON.stringify(errorResponse) + '\n');
       }
     });
   }
 
-  async send(message: JSONRPCMessage): Promise<void> {
-    // Don't log for tools/list responses
-    const isToolsListResponse = 'id' in message && 'result' in message &&
-      typeof message.result === 'object' && message.result !== null &&
-      'tools' in message.result;
+  private async handleToolCall(message: JSONRPCRequest): Promise<JSONRPCResponse> {
+    const toolName = message.params?.name;
+    const toolArgs = message.params?.arguments || {};
 
-    if (!isToolsListResponse) {
-      this.outputChannel.appendLine('Sending message: ' + JSON.stringify(message));
+    this.outputChannel.appendLine(`Calling tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+
+    if (!toolName || !toolHandlers[toolName]) {
+      return {
+        jsonrpc: '2.0',
+        id: message.id,
+        error: {
+          code: -32602,
+          message: `Tool not found: ${toolName}`
+        }
+      };
     }
 
-    if ('id' in message && 'result' in message) {
-      // This is a response to a previous request
-      const resolve = this.pendingResponses.get(message.id);
-      if (resolve) {
-        resolve(message);
-        this.pendingResponses.delete(message.id);
-      } else {
-        this.outputChannel.appendLine(`No pending response for ID: ${message.id}`);
-      }
+    try {
+      const handler = toolHandlers[toolName];
+      const result = await handler(toolArgs);
+
+      return {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: result
+      };
+    } catch (err) {
+      this.outputChannel.appendLine(`Tool execution error: ${err}`);
+      return {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          content: [{
+            type: 'text',
+            text: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`
+          }],
+          isError: true
+        }
+      };
     }
   }
 

@@ -1,24 +1,21 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as vscode from 'vscode';
+import { SocketServer } from './sock-transport';
 
 export function registerVSCodeCommands(
   context: vscode.ExtensionContext,
-  mcpServer: McpServer,
+  socketServer: SocketServer,
   outputChannel: vscode.OutputChannel
 ) {
   // COMMAND PALETTE COMMAND: Stop the MCP Server
   context.subscriptions.push(
-    vscode.commands.registerCommand('mcpServer.stopServer', () => {
+    vscode.commands.registerCommand('mcpServer.stopServer', async () => {
       try {
-        mcpServer.close();
-        outputChannel.appendLine('MCP Server stopped.');
+        await socketServer.close();
+        outputChannel.appendLine('Socket Server stopped.');
       } catch (err) {
-        vscode.window.showWarningMessage('MCP Server is not running.');
-        outputChannel.appendLine('Attempted to stop the MCP Server, but it is not running.');
-        return;
+        vscode.window.showWarningMessage('Socket Server is not running.');
+        outputChannel.appendLine('Attempted to stop the Socket Server, but it is not running.');
       }
-      mcpServer.close();
     }),
   );
-
 }

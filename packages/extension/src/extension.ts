@@ -1,16 +1,15 @@
 import * as vscode from 'vscode';
 import { registerVSCodeCommands } from './commands';
-import { createMcpServer, extensionDisplayName } from './mcp-server';
-import { SocketTransport } from './sock-transport';
+import { SocketServer } from './sock-transport';
 import { initLogger } from './utils/logger';
 import { registerWorkspaces, unregisterByPid } from './utils/router-table';
 
-let transport: SocketTransport;
+const extensionDisplayName = 'MCP Server for Java';
+
+let socketServer: SocketServer;
 let currentWorkspaces: string[] = [];
 
 export const activate = async (context: vscode.ExtensionContext) => {
-  console.log('LMLMLM', vscode.lm.tools);
-
   // Create the output channel for logging
   const outputChannel = vscode.window.createOutputChannel(extensionDisplayName);
   initLogger(outputChannel);
@@ -20,15 +19,12 @@ export const activate = async (context: vscode.ExtensionContext) => {
   currentWorkspaces = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) || [];
   outputChannel.appendLine(`Workspace paths: ${currentWorkspaces.join(', ')}`);
 
-  // Initialize the MCP server instance
-  const mcpServer = createMcpServer(outputChannel);
-
-  // Server start function with socket transport
+  // Start socket server
   async function startServer() {
-    outputChannel.appendLine(`DEBUG: Starting MCP Server with Socket transport (PID: ${process.pid})...`);
-    transport = new SocketTransport(outputChannel, currentWorkspaces);
+    outputChannel.appendLine(`Starting Socket Server (PID: ${process.pid})...`);
+    socketServer = new SocketServer(outputChannel, currentWorkspaces);
 
-    await mcpServer.connect(transport); // connect calls transport.start()
+    await socketServer.start();
 
     // Register workspaces in router table with PID
     if (currentWorkspaces.length > 0) {
@@ -37,16 +33,16 @@ export const activate = async (context: vscode.ExtensionContext) => {
     }
   }
 
-  // Start server with socket transport
+  // Start server
   try {
     await startServer();
-    outputChannel.appendLine(`MCP Server started on socket: ${transport.getSocketPath()}`);
+    outputChannel.appendLine(`Socket Server started on: ${socketServer.getSocketPath()}`);
   } catch (err) {
-    outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
+    outputChannel.appendLine(`Failed to start Socket Server: ${err}`);
   }
 
   // Register VSCode commands
-  registerVSCodeCommands(context, mcpServer, outputChannel);
+  registerVSCodeCommands(context, socketServer, outputChannel);
 
   // Register cleanup on deactivation
   context.subscriptions.push({
@@ -78,8 +74,8 @@ export async function deactivate() {
   // Unregister from router table
   await unregisterByPid(process.pid);
   
-  // Close transport
-  if (transport) {
-    await transport.close();
+  // Close socket server
+  if (socketServer) {
+    await socketServer.close();
   }
 }
