@@ -4,7 +4,7 @@ import { waitForJavaLspReady } from "../utils/java-lsp";
 
 export const searchJavaTypesSchema = z.object({
   name: z.string().describe("The class name, partial class name, or package name of the Java types (classes, enums, and interfaces) to search for."),
-  workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise.")
+  workspacePaths: z.array(z.string()).describe("Specify the absolute paths of the workspaces in which to search. Pass the current workspace paths unless the user specifies otherwise.")
 })
 
 interface SearchJavaTypesResult {
@@ -91,5 +91,3 @@ export async function searchJavaTypesTool(params: z.infer<typeof searchJavaTypes
     };
   }
 }
-
-

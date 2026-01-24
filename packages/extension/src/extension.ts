@@ -1,13 +1,12 @@
 import * as vscode from 'vscode';
-import { BidiHttpTransport } from './bidi-http-transport';
 import { registerVSCodeCommands } from './commands';
 import { createMcpServer, extensionDisplayName } from './mcp-server';
+import { SocketTransport } from './sock-transport';
 import { initLogger } from './utils/logger';
-import { findAvailablePort, registerWorkspace, unregisterWorkspace } from './utils/router-table';
+import { registerWorkspaces, unregisterByPid } from './utils/router-table';
 
-let transport: BidiHttpTransport;
-let currentWorkspace: string | undefined;
-let currentPort: number | undefined;
+let transport: SocketTransport;
+let currentWorkspaces: string[] = [];
 
 export const activate = async (context: vscode.ExtensionContext) => {
   console.log('LMLMLM', vscode.lm.tools);
@@ -17,38 +16,31 @@ export const activate = async (context: vscode.ExtensionContext) => {
   initLogger(outputChannel);
   outputChannel.appendLine(`Activating ${extensionDisplayName}...`);
 
-  // Get current workspace path
-  currentWorkspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  // Get all workspace paths (supports multi-root workspaces)
+  currentWorkspaces = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) || [];
+  outputChannel.appendLine(`Workspace paths: ${currentWorkspaces.join(', ')}`);
 
   // Initialize the MCP server instance
   const mcpServer = createMcpServer(outputChannel);
 
-  // Server start function with dynamic port allocation
-  async function startServer(port?: number) {
-    // If no port specified, find an available one (prioritizing 60100)
-    if (port === undefined) {
-      port = await findAvailablePort();
-    }
+  // Server start function with socket transport
+  async function startServer() {
+    outputChannel.appendLine(`DEBUG: Starting MCP Server with Socket transport (PID: ${process.pid})...`);
+    transport = new SocketTransport(outputChannel, currentWorkspaces);
 
-    outputChannel.appendLine(`DEBUG: Starting MCP Server on port ${port}...`);
-    transport = new BidiHttpTransport(port, outputChannel, currentWorkspace);
+    await mcpServer.connect(transport); // connect calls transport.start()
 
-    await mcpServer.connect(transport); // connect calls transport.start().
-
-    // Get the actual port (may differ from requested port if there was a conflict)
-    currentPort = transport.getActualPort() ?? port;
-
-    // Register workspace in router table with actual port
-    if (currentWorkspace) {
-      await registerWorkspace(currentWorkspace, currentPort, process.pid);
-      outputChannel.appendLine(`Registered workspace ${currentWorkspace} with port ${currentPort}`);
+    // Register workspaces in router table with PID
+    if (currentWorkspaces.length > 0) {
+      await registerWorkspaces(currentWorkspaces, process.pid);
+      outputChannel.appendLine(`Registered workspaces with PID ${process.pid}: ${currentWorkspaces.join(', ')}`);
     }
   }
 
-  // Start server with dynamic port allocation (prioritizing 60100)
+  // Start server with socket transport
   try {
-    await startServer(); // No port specified, will auto-allocate
-    outputChannel.appendLine(`MCP Server started on port ${currentPort}.`);
+    await startServer();
+    outputChannel.appendLine(`MCP Server started on socket: ${transport.getSocketPath()}`);
   } catch (err) {
     outputChannel.appendLine(`Failed to start MCP Server: ${err}`);
   }
@@ -59,20 +51,35 @@ export const activate = async (context: vscode.ExtensionContext) => {
   // Register cleanup on deactivation
   context.subscriptions.push({
     dispose: async () => {
-      if (currentWorkspace) {
-        await unregisterWorkspace(currentWorkspace);
-        outputChannel.appendLine(`Unregistered workspace ${currentWorkspace}`);
-      }
+      await unregisterByPid(process.pid);
+      outputChannel.appendLine(`Unregistered PID ${process.pid}`);
     }
   });
+
+  // Listen for workspace folder changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(async (_event) => {
+      const newWorkspaces = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) || [];
+      outputChannel.appendLine(`Workspace folders changed. New paths: ${newWorkspaces.join(', ')}`);
+      
+      // Update the registered workspaces
+      currentWorkspaces = newWorkspaces;
+      if (currentWorkspaces.length > 0) {
+        await registerWorkspaces(currentWorkspaces, process.pid);
+        outputChannel.appendLine(`Updated registered workspaces for PID ${process.pid}`);
+      }
+    })
+  );
 
   outputChannel.appendLine(`${extensionDisplayName} activated.`);
 };
 
 export async function deactivate() {
-  // Unregister workspace from router table
-  if (currentWorkspace) {
-    await unregisterWorkspace(currentWorkspace);
+  // Unregister from router table
+  await unregisterByPid(process.pid);
+  
+  // Close transport
+  if (transport) {
+    await transport.close();
   }
-  // Clean-up is managed by the disposables added in the activate method.
 }

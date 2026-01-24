@@ -3,25 +3,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, CallToolResult, JSONRPCRequest, JSONRPCResponse, ListToolsRequestSchema, ListToolsResult } from '@modelcontextprotocol/sdk/types.js';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { initialTools } from './initial_tools.js';
-import { getPortForWorkspace, getDefaultPort, listWorkspaces, normalizeWorkspacePath } from './router-table.js';
+import { findMatchingEntry, listWorkspaces } from './router-table.js';
+import { sendSocketRequest, isSocketAvailable } from './socket-client.js';
 
-const CACHE_DIR = path.join(os.homedir(), '.vscode-as-mcp-relay-cache');
-const TOOLS_CACHE_FILE = path.join(CACHE_DIR, 'tools-list-cache.json');
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
-const RELAY_VERSION = '0.0.9';
+const RELAY_VERSION = '0.0.10';
 
 class MCPRelay {
   private mcpServer: McpServer;
-  private defaultServerUrl: string;
   private client?: string;
 
-  constructor(readonly baseServerUrl: string, client?: string) {
-    this.defaultServerUrl = baseServerUrl;
+  constructor(client?: string) {
     this.client = client;
     this.mcpServer = new McpServer({
       name: 'vscode-as-mcp',
@@ -32,92 +26,38 @@ class MCPRelay {
       },
     });
 
-    // Periodically call listTools to update the tools list
-    setInterval(async () => {
-      let tools: any[];
-      let serverUrl: string;
-      try {
-        serverUrl = await this.getServerUrl();
-        const resp = await this.requestWithRetry(serverUrl, JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'tools/list',
-          params: {},
-          id: Math.floor(Math.random() * 1000000),
-        } as JSONRPCRequest));
-        const parsedResponse = resp as JSONRPCResponse;
-        tools = parsedResponse.result.tools as any[];
-      } catch (err) {
-        return;
-      }
-
-      const cachedTools = await this.getToolsCache();
-
-      // Compare the fetched tools with the cached ones
-      if (cachedTools && cachedTools.length === tools.length) {
-        console.error('Fetched tools list is the same as the cached one, not updating cache');
-        return { tools: cachedTools };
-      }
-
-      // Notify to user that tools have been updated and restart the client
-      try {
-        await this.requestWithRetry(serverUrl + '/notify-tools-updated', '');
-      } catch (err) {
-        console.error(`Failed to notify tools updated: ${(err as Error).message}`);
-      }
-
-      try {
-        await this.saveToolsCache(tools);
-      } catch (cacheErr) {
-        console.error(`Failed to cache tools response: ${(cacheErr as Error).message}`);
-      }
-    }, 30000); // every 30 seconds
-
-    this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async (request): Promise<ListToolsResult> => {
-      const cachedTools = await this.getToolsCache() ?? initialTools;
-
-      let tools: any[];
-      try {
-        const serverUrl = await this.getServerUrl();
-        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'tools/list',
-          params: request.params,
-          id: Math.floor(Math.random() * 1000000),
-        } as JSONRPCRequest));
-        const parsedResponse = response as JSONRPCResponse;
-        tools = parsedResponse.result.tools as any[];
-      } catch (err) {
-        console.error(`Failed to fetch tools list: ${(err as Error).message}`);
-        return { tools: cachedTools as any[] };
-      }
-
-      // Update cache
-      try {
-        await this.saveToolsCache(tools);
-      } catch (cacheErr) {
-        console.error(`Failed to cache tools response: ${(cacheErr as Error).message}`);
-      }
-
-      return { tools };
+    this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async (_request): Promise<ListToolsResult> => {
+      // Always return initialTools - no caching needed
+      return { tools: initialTools as any[] };
     });
 
     this.mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
       try {
-        // Extract workspace parameter from tool arguments
+        // Extract workspacePaths parameter from tool arguments
         const args = request.params.arguments as Record<string, unknown> | undefined;
-        const workspace = args?.workspace as string | undefined;
+        const workspacePaths = args?.workspacePaths as string[] | undefined;
 
-        // Get server URL based on workspace parameter
-        const serverUrl = await this.getServerUrl(workspace);
-        console.error(`Routing tool call to: ${serverUrl} (workspace: ${workspace || 'default'})`);
+        // Get target PID based on workspacePaths parameter
+        const pid = await this.getTargetPid(workspacePaths || []);
+        if (!pid) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Failed to find matching VSCode extension. No extension found for workspacePaths: ${workspacePaths?.join(', ') || 'none'}`,
+            }],
+          };
+        }
+
+        console.error(`Routing tool call to PID: ${pid} (workspacePaths: ${workspacePaths?.join(', ') || 'default'})`);
         console.error(`Process PID: ${process.pid}, Parent PID: ${process.ppid}`);
 
-        const response = await this.requestWithRetry(serverUrl, JSON.stringify({
+        const response = await this.requestWithRetry(pid, {
           jsonrpc: '2.0',
           method: request.method,
           params: request.params,
           id: Math.floor(Math.random() * 1000000),
-        } as JSONRPCRequest), {
+        } as JSONRPCRequest, {
           'X-Relay-Version': RELAY_VERSION,
           ...(this.client && { 'X-MCP-Client': this.client }),
         });
@@ -129,7 +69,7 @@ class MCPRelay {
           isError: true,
           content: [{
             type: 'text',
-            text: `Failed to communicate with the Vsode Mcp Server.`,
+            text: `Failed to communicate with the VSCode MCP Server.`,
           }],
         };
       }
@@ -137,79 +77,41 @@ class MCPRelay {
   }
 
   /**
-   * Gets the server URL for a specific workspace or returns the default URL.
-   * @param workspace Optional workspace path to route to
-   * @returns The server URL for the workspace or the default URL
+   * Gets the target PID for routing based on workspacePaths.
+   * @param workspacePaths Array of workspace paths from the tool request
+   * @returns The PID to route to, or undefined if no match found
    */
-  async getServerUrl(workspace?: string): Promise<string> {
-    if (!workspace) {
-      return this.defaultServerUrl;
-    }
-
-    try {
-      const port = await getPortForWorkspace(workspace);
-      if (port) {
-        return `http://localhost:${port}`;
-      }
-
-      // Try to find a matching workspace by partial path match
-      const workspaces = await listWorkspaces();
-      const normalizedInput = normalizeWorkspacePath(workspace);
-
-      for (const entry of workspaces) {
-        const normalizedEntry = normalizeWorkspacePath(entry.workspace);
-        // Check if input contains the workspace path or vice versa
-        if (normalizedEntry.includes(normalizedInput) || normalizedInput.includes(normalizedEntry)) {
-          return `http://localhost:${entry.port}`;
+  async getTargetPid(workspacePaths: string[]): Promise<number | undefined> {
+    // If no workspacePaths provided, try to find any available extension
+    if (!workspacePaths || workspacePaths.length === 0) {
+      const entries = await listWorkspaces();
+      for (const entry of entries) {
+        if (await isSocketAvailable(entry.pid)) {
+          return entry.pid;
         }
       }
-
-      console.error(`No server found for workspace: ${workspace}, using default`);
-      return this.defaultServerUrl;
-    } catch (err) {
-      console.error(`Error getting server URL for workspace: ${(err as Error).message}`);
-      return this.defaultServerUrl;
+      return undefined;
     }
-  }
-  // キャッシュディレクトリの初期化
-  async initCacheDir(): Promise<void> {
-    try {
-      // ディレクトリが存在しない場合は作成
-      try {
-        await fs.mkdir(CACHE_DIR, { recursive: true });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
-          throw err;
-        }
+
+    // Use the new matching logic with parent PID
+    const entry = await findMatchingEntry(workspacePaths, process.ppid);
+    if (entry && await isSocketAvailable(entry.pid)) {
+      return entry.pid;
+    }
+
+    // Fallback: try to find any available extension
+    const entries = await listWorkspaces();
+    for (const e of entries) {
+      if (await isSocketAvailable(e.pid)) {
+        console.error(`Fallback: using PID ${e.pid} as no exact match found for workspacePaths`);
+        return e.pid;
       }
-    } catch (err) {
-      console.error(`Failed to initialize cache directory: ${(err as Error).message}`);
     }
+
+    return undefined;
   }
 
-  // キャッシュの保存
-  async saveToolsCache(tools: any[]): Promise<void> {
-    await this.initCacheDir();
-    try {
-      await fs.writeFile(TOOLS_CACHE_FILE, JSON.stringify(tools), 'utf8');
-      console.error('Tools list cache saved');
-    } catch (err) {
-      console.error(`Failed to save cache: ${(err as Error).message}`);
-    }
-  }
-
-  async getToolsCache() {
-    try {
-      await fs.access(TOOLS_CACHE_FILE);
-      const cacheData = await fs.readFile(TOOLS_CACHE_FILE, 'utf8');
-      return JSON.parse(cacheData) as any[];
-    } catch (err) {
-      console.error(`Failed to load cache file: ${(err as Error).message}`);
-      return null;
-    }
-  }
-
-  async requestWithRetry(url: string, body: string, extraHeaders?: Record<string, string>): Promise<unknown> {
+  async requestWithRetry(pid: number, body: unknown, extraHeaders?: Record<string, string>): Promise<unknown> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -219,26 +121,13 @@ class MCPRelay {
       }
 
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...extraHeaders,
-          },
-          body: body,
+        const response = await sendSocketRequest(pid, body, {
+          headers: extraHeaders,
         });
-
-        const responseText = await response.text();
-
-        // Only status codes >= 500 are errors
-        if (response.status >= 500) {
-          lastError = new Error(`Request failed with status ${response.status}: ${responseText}`);
-          continue;
-        }
-
-        return JSON.parse(responseText);
+        return response;
       } catch (err) {
         lastError = err as Error;
+        console.error(`Request failed: ${lastError.message}`);
       }
     }
 
@@ -253,26 +142,22 @@ class MCPRelay {
 // コマンドライン引数の解析
 function parseArgs() {
   const args = process.argv.slice(2);
-  let serverUrl = 'http://localhost:60100';
   let client: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--server-url' && i + 1 < args.length) {
-      serverUrl = args[i + 1];
-      i++;
-    } else if (args[i] === '--client' && i + 1 < args.length) {
+    if (args[i] === '--client' && i + 1 < args.length) {
       client = args[i + 1];
       i++;
     }
   }
 
-  return { serverUrl, client };
+  return { client };
 }
 
 try {
   console.error(`Relay starting - PID: ${process.pid}, Parent PID: ${process.ppid}`);
-  const { serverUrl, client } = parseArgs();
-  const relay = new MCPRelay(serverUrl, client);
+  const { client } = parseArgs();
+  const relay = new MCPRelay(client);
   await relay.start();
 } catch (err) {
   console.error(`Fatal error: ${(err as Error).message}`);

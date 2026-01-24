@@ -1,7 +1,10 @@
-// Common workspace property definition for all tools
-const workspaceProperty = {
-  "type": "string",
-  "description": "Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."
+// Common workspacePaths property definition for all tools
+const workspacePathsProperty = {
+  "type": "array",
+  "items": {
+    "type": "string"
+  },
+  "description": "Specify the absolute paths of the workspaces in which to search. Pass the current workspace paths unless the user specifies otherwise."
 };
 
 export const initialTools = [
@@ -15,11 +18,11 @@ export const initialTools = [
           "type": "string",
           "description": "The class name, partial class name, or package name of the Java types (classes, enums, and interfaces) to search for."
         },
-        "workspace": workspaceProperty
+        "workspacePaths": workspacePathsProperty
       },
       "required": [
         "name",
-        "workspace"
+        "workspacePaths"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
@@ -35,7 +38,7 @@ export const initialTools = [
           "type": "string",
           "description": "The fully qualified name (FQN) of the Java type to retrieve its source code."
         },
-        "workspace": workspaceProperty,
+        "workspacePaths": workspacePathsProperty,
         "methodNames": {
           "type": "array",
           "items": {
@@ -50,7 +53,7 @@ export const initialTools = [
       },
       "required": [
         "fullyQualifiedName",
-        "workspace"
+        "workspacePaths"
       ],
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"

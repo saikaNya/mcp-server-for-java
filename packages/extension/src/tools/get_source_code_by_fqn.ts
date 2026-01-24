@@ -7,7 +7,7 @@ import { getClient } from "../utils/request-context";
 
 export const getSourceCodeByFQNSchema = z.object({
     fullyQualifiedName: z.string().describe("The fully qualified name (FQN) of the Java type to retrieve its source code."),
-    workspace: z.string().describe("Specify the absolute path of the workspace in which to search. Pass the current workspace path unless the user specifies otherwise."),
+    workspacePaths: z.array(z.string()).describe("Specify the absolute paths of the workspaces in which to search. Pass the current workspace paths unless the user specifies otherwise."),
     methodNames: z.array(z.string()).optional().describe("Optional list of method names to filter. If provided, only methods whose simple name is in this list will be returned; all other methods will not be included in the result, but the rest of the class content is kept unchanged."),
     uriPath: z.string().optional().describe("The vscode uri path. Only required when the fully qualified name cannot uniquely identify a single uri.")
 })
@@ -389,4 +389,4 @@ ${sourceCode}
             isError: true
         };
     }
-} 
+}

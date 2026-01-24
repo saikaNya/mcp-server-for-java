@@ -1,7 +1,7 @@
 /**
- * Port Router Table Management (Read-Only)
+ * Router Table Management (Read-Only)
  * 
- * Relay only needs to read the router table to find workspace ports.
+ * Relay only needs to read the router table to find workspace PIDs for socket communication.
  * The extension is responsible for writing/managing the router table.
  */
 
@@ -9,18 +9,29 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const ROUTER_TABLE_FILE = path.join(os.homedir(), '.vscode-mcp-router.json');
-const DEFAULT_PORT = 60100;
+const ROUTER_TABLE_FILE = path.join(os.homedir(), '.vscode-mcp-router-v2.json');
 
 export interface RouterEntry {
-  workspace: string;
-  port: number;
-  pid?: number;
+  workspaces: string[];  // Array of workspace paths (supports multi-root workspaces)
+  pid: number;           // Required, used for socket routing
   lastUpdated: number;
 }
 
 export interface RouterTable {
   entries: RouterEntry[];
+}
+
+/**
+ * Gets the socket path for a given PID.
+ * Uses Named Pipe on Windows, Unix Domain Socket on other platforms.
+ */
+export function getSocketPath(pid: number): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\vscode-mcp-${pid}`;
+  } else {
+    const socketDir = path.join(os.homedir(), '.vscode-mcp-sockets');
+    return path.join(socketDir, `${pid}.sock`);
+  }
 }
 
 /**
@@ -31,6 +42,13 @@ export function normalizeWorkspacePath(workspacePath: string): string {
     .replace(/\\/g, '/')
     .replace(/\/+$/, '')
     .toLowerCase();
+}
+
+/**
+ * Normalizes an array of workspace paths.
+ */
+export function normalizeWorkspacePaths(workspacePaths: string[]): string[] {
+  return workspacePaths.map(normalizeWorkspacePath).sort();
 }
 
 /**
@@ -46,23 +64,6 @@ async function loadRouterTable(): Promise<RouterTable> {
 }
 
 /**
- * Finds a workspace entry in the router table.
- */
-async function findWorkspaceEntry(workspacePath: string): Promise<RouterEntry | undefined> {
-  const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
-  return table.entries.find(e => normalizeWorkspacePath(e.workspace) === normalized);
-}
-
-/**
- * Gets the port for a workspace, returns undefined if not found.
- */
-export async function getPortForWorkspace(workspacePath: string): Promise<number | undefined> {
-  const entry = await findWorkspaceEntry(workspacePath);
-  return entry?.port;
-}
-
-/**
  * Lists all registered workspaces.
  */
 export async function listWorkspaces(): Promise<RouterEntry[]> {
@@ -71,8 +72,78 @@ export async function listWorkspaces(): Promise<RouterEntry[]> {
 }
 
 /**
- * Gets the default port constant.
+ * Finds a matching entry based on workspacePaths and parentPid.
+ * 
+ * For single workspace (workspacePaths.length === 1):
+ * 1. Exact match: entry.workspaces contains only this single directory
+ * 2. Parent PID match: entry.pid === parentPid
+ * 3. Contains match: entry.workspaces contains this directory
+ * 
+ * For multiple workspaces (workspacePaths.length > 1):
+ * 1. Exact match: entry.workspaces exactly equals workspacePaths (sorted)
+ * 2. Parent PID match: entry.pid === parentPid
+ * 3. Contains match: entry.workspaces contains any of the directories
  */
-export function getDefaultPort(): number {
-  return DEFAULT_PORT;
+export async function findMatchingEntry(
+  workspacePaths: string[],
+  parentPid: number
+): Promise<RouterEntry | undefined> {
+  const entries = await listWorkspaces();
+  const normalizedInput = normalizeWorkspacePaths(workspacePaths);
+  const isSingle = normalizedInput.length === 1;
+
+  // Priority 1: Exact match
+  for (const entry of entries) {
+    const normalizedEntry = normalizeWorkspacePaths(entry.workspaces);
+    
+    if (isSingle) {
+      // For single workspace: entry should contain only this directory
+      if (normalizedEntry.length === 1 && normalizedEntry[0] === normalizedInput[0]) {
+        return entry;
+      }
+    } else {
+      // For multiple workspaces: arrays should be exactly equal
+      if (normalizedEntry.length === normalizedInput.length &&
+          normalizedEntry.every((p, i) => p === normalizedInput[i])) {
+        return entry;
+      }
+    }
+  }
+
+  // Priority 2: Parent PID match
+  for (const entry of entries) {
+    if (entry.pid === parentPid) {
+      return entry;
+    }
+  }
+
+  // Priority 3: Contains match
+  for (const entry of entries) {
+    const normalizedEntry = normalizeWorkspacePaths(entry.workspaces);
+    
+    if (isSingle) {
+      // For single workspace: entry.workspaces should contain this directory
+      if (normalizedEntry.includes(normalizedInput[0])) {
+        return entry;
+      }
+    } else {
+      // For multiple workspaces: entry.workspaces should contain any of the directories
+      if (normalizedInput.some(p => normalizedEntry.includes(p))) {
+        return entry;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Gets the PID for matching workspaces.
+ */
+export async function getPidForWorkspaces(
+  workspacePaths: string[],
+  parentPid: number
+): Promise<number | undefined> {
+  const entry = await findMatchingEntry(workspacePaths, parentPid);
+  return entry?.pid;
 }

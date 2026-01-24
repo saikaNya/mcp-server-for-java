@@ -4,7 +4,7 @@ import express from 'express';
 import * as http from 'node:http';
 import * as vscode from 'vscode';
 import { RequestContext, requestContextStorage } from './utils/request-context';
-import { unregisterWorkspace } from './utils/router-table';
+import { unregisterByPid } from './utils/router-table';
 
 const MIN_RELAY_VERSION = '0.0.2';
 const VERSION_WARNING_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown between warnings
@@ -42,7 +42,7 @@ export class BidiHttpTransport implements Transport {
   constructor(
     readonly listenPort: number,
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly workspacePath?: string
+    _workspacePath?: string  // Kept for backward compatibility, no longer used
   ) { }
 
   /**
@@ -240,14 +240,12 @@ export class BidiHttpTransport implements Transport {
       this.httpServer.close();
       this.httpServer = undefined;
     }
-    // Unregister workspace from router table
-    if (this.workspacePath) {
-      try {
-        await unregisterWorkspace(this.workspacePath);
-        this.outputChannel.appendLine(`Unregistered workspace ${this.workspacePath} from router table`);
-      } catch (err) {
-        this.outputChannel.appendLine(`Failed to unregister workspace: ${err}`);
-      }
+    // Unregister from router table by PID
+    try {
+      await unregisterByPid(process.pid);
+      this.outputChannel.appendLine(`Unregistered PID ${process.pid} from router table`);
+    } catch (err) {
+      this.outputChannel.appendLine(`Failed to unregister: ${err}`);
     }
   }
 }

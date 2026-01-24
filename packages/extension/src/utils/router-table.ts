@@ -1,28 +1,53 @@
 /**
- * Port Router Table Management for Extension
+ * Router Table Management for Extension
  * 
- * Maintains a mapping between workspace paths and their assigned ports.
+ * Maintains a mapping between workspace paths and their assigned PIDs for socket communication.
  * The router table is stored in the user's home directory.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import * as net from 'node:net';
 
-const ROUTER_TABLE_FILE = path.join(os.homedir(), '.vscode-mcp-router.json');
-const DEFAULT_PORT = 60100;
-const MAX_PORT = 63999;
+const ROUTER_TABLE_FILE = path.join(os.homedir(), '.vscode-mcp-router-v2.json');
 
 export interface RouterEntry {
-  workspace: string;
-  port: number;
-  pid?: number;
+  workspaces: string[];  // Array of workspace paths (supports multi-root workspaces)
+  pid: number;           // Required, used for socket routing
   lastUpdated: number;
 }
 
 export interface RouterTable {
   entries: RouterEntry[];
+}
+
+/**
+ * Gets the socket path for a given PID.
+ * Uses Named Pipe on Windows, Unix Domain Socket on other platforms.
+ */
+export function getSocketPath(pid: number): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\vscode-mcp-${pid}`;
+  } else {
+    const socketDir = path.join(os.homedir(), '.vscode-mcp-sockets');
+    return path.join(socketDir, `${pid}.sock`);
+  }
+}
+
+/**
+ * Ensures the socket directory exists (Unix only).
+ */
+export async function ensureSocketDir(): Promise<void> {
+  if (process.platform !== 'win32') {
+    const socketDir = path.join(os.homedir(), '.vscode-mcp-sockets');
+    try {
+      await fs.mkdir(socketDir, { recursive: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw err;
+      }
+    }
+  }
 }
 
 /**
@@ -33,6 +58,13 @@ export function normalizeWorkspacePath(workspacePath: string): string {
     .replace(/\\/g, '/')
     .replace(/\/+$/, '')
     .toLowerCase();
+}
+
+/**
+ * Normalizes an array of workspace paths.
+ */
+export function normalizeWorkspacePaths(workspacePaths: string[]): string[] {
+  return workspacePaths.map(normalizeWorkspacePath).sort();
 }
 
 /**
@@ -55,100 +87,52 @@ export async function saveRouterTable(table: RouterTable): Promise<void> {
 }
 
 /**
- * Finds a workspace entry in the router table.
+ * Finds a workspace entry in the router table by exact workspaces match.
  */
-export async function findWorkspaceEntry(workspacePath: string): Promise<RouterEntry | undefined> {
+export async function findWorkspaceEntry(workspacePaths: string[]): Promise<RouterEntry | undefined> {
   const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
-  return table.entries.find(e => normalizeWorkspacePath(e.workspace) === normalized);
-}
-
-/**
- * Gets the port for a workspace, returns undefined if not found.
- */
-export async function getPortForWorkspace(workspacePath: string): Promise<number | undefined> {
-  const entry = await findWorkspaceEntry(workspacePath);
-  return entry?.port;
-}
-
-/**
- * Checks if a port is available (not in use by another process).
- */
-async function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once('error', () => {
-      resolve(false);
-    });
-    server.once('listening', () => {
-      server.close();
-      resolve(true);
-    });
-    server.listen(port, '127.0.0.1');
+  const normalizedInput = normalizeWorkspacePaths(workspacePaths);
+  
+  return table.entries.find(e => {
+    const normalizedEntry = normalizeWorkspacePaths(e.workspaces);
+    return normalizedInput.length === normalizedEntry.length &&
+      normalizedInput.every((p, i) => p === normalizedEntry[i]);
   });
 }
 
 /**
- * Finds an available port, prioritizing DEFAULT_PORT (60100) first.
+ * Finds a workspace entry by PID.
  */
-export async function findAvailablePort(): Promise<number> {
+export async function findEntryByPid(pid: number): Promise<RouterEntry | undefined> {
   const table = await loadRouterTable();
-  const usedPorts = new Set(table.entries.map(e => e.port));
-  
-  // First, try the default port 60100
-  if (!usedPorts.has(DEFAULT_PORT) && await isPortAvailable(DEFAULT_PORT)) {
-    return DEFAULT_PORT;
-  }
-  
-  // If default port is not available, find the next available port
-  for (let port = DEFAULT_PORT + 1; port <= MAX_PORT; port++) {
-    if (!usedPorts.has(port) && await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  
-  throw new Error('No available ports in range');
+  return table.entries.find(e => e.pid === pid);
 }
 
 /**
- * Registers a workspace with a specific port in the router table.
+ * Registers workspaces with a specific PID in the router table.
  */
-export async function registerWorkspace(workspacePath: string, port: number, pid?: number): Promise<void> {
+export async function registerWorkspaces(workspacePaths: string[], pid: number): Promise<void> {
   const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
   
-  // Remove existing entry for this workspace if exists
-  table.entries = table.entries.filter(e => normalizeWorkspacePath(e.workspace) !== normalized);
-  
+  // Remove existing entry for this PID if exists
+  table.entries = table.entries.filter(e => e.pid !== pid);
+
   // Add new entry
   table.entries.push({
-    workspace: workspacePath,
-    port,
+    workspaces: workspacePaths,
     pid,
     lastUpdated: Date.now(),
   });
-  
+
   await saveRouterTable(table);
 }
 
 /**
- * Unregisters a workspace from the router table.
+ * Unregisters workspaces from the router table by PID.
  */
-export async function unregisterWorkspace(workspacePath: string): Promise<void> {
+export async function unregisterByPid(pid: number): Promise<void> {
   const table = await loadRouterTable();
-  const normalized = normalizeWorkspacePath(workspacePath);
-  
-  table.entries = table.entries.filter(e => normalizeWorkspacePath(e.workspace) !== normalized);
-  
-  await saveRouterTable(table);
-}
-
-/**
- * Unregisters a workspace by port from the router table.
- */
-export async function unregisterByPort(port: number): Promise<void> {
-  const table = await loadRouterTable();
-  table.entries = table.entries.filter(e => e.port !== port);
+  table.entries = table.entries.filter(e => e.pid !== pid);
   await saveRouterTable(table);
 }
 
@@ -161,9 +145,15 @@ export async function listWorkspaces(): Promise<RouterEntry[]> {
 }
 
 /**
- * Gets the default port constant.
+ * Cleans up stale socket files (Unix only).
  */
-export function getDefaultPort(): number {
-  return DEFAULT_PORT;
+export async function cleanupStaleSocketFile(pid: number): Promise<void> {
+  if (process.platform !== 'win32') {
+    const socketPath = getSocketPath(pid);
+    try {
+      await fs.unlink(socketPath);
+    } catch {
+      // Ignore errors if file doesn't exist
+    }
+  }
 }
-
