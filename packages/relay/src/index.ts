@@ -9,7 +9,7 @@ import { sendSocketRequest, isSocketAvailable } from './socket-client.js';
 
 const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 1000; // 1 second
-const RELAY_VERSION = '0.0.10';
+const RELAY_VERSION = '0.0.9';
 
 class MCPRelay {
   private mcpServer: McpServer;
