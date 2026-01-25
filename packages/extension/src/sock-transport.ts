@@ -1,6 +1,6 @@
 import * as net from 'net';
 import * as vscode from 'vscode';
-import { searchJavaTypesTool } from './tools/search_java_types';
+import { searchSymbolTool } from './tools/search_symbol';
 import { getSourceCodeByFQNTool } from './tools/get_source_code_by_fqn';
 import { RequestContext, requestContextStorage } from './utils/request-context';
 import { getSocketPath, ensureSocketDir, unregisterByPid, cleanupStaleSocketFile } from './utils/router-table';
@@ -30,7 +30,7 @@ let lastVersionWarningTime = 0;
 
 // Tool name to handler mapping
 const toolHandlers: Record<string, (params: any) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>> = {
-  'searchJavaTypes': searchJavaTypesTool,
+  'searchSymbol': searchSymbolTool,
   'getSourceCodeByFQN': getSourceCodeByFQNTool,
 };
 

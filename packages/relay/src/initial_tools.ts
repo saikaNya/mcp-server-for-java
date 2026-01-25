@@ -9,19 +9,32 @@ const workspacePathsProperty = {
 
 export const initialTools = [
   {
-    "name": "searchJavaTypes",
-    "description": "Searches for Java types (classes, interfaces, and enums) by full name, partial name, or package name.\nThe search scope includes:\n- Project source code\n- External dependencies (libraries and frameworks)\n- JDK source code\nReturns a list of fully qualified names (FQNs) of all matching types.",
+    "name": "searchSymbol",
+    "description": "Searches for symbols (classes, interfaces, enums, methods, functions, variables, etc.) by name across multiple languages.\nThe search scope includes:\n- Project source code\n- External dependencies (libraries and frameworks)\n- JDK source code (for Java)\nReturns results grouped by language with symbol details.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "name": {
+        "symbolName": {
           "type": "string",
-          "description": "The class name, partial class name, or package name of the Java types (classes, enums, and interfaces) to search for."
+          "description": "The symbol name to search for."
+        },
+        "symbolCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["type", "callable", "data", "container", "other"]
+          },
+          "description": "Filter symbols by category. If not provided, no filtering is applied. Available categories: 'type' (Class, Interface, Enum, Struct), 'callable' (Method, Function, Constructor, Operator), 'data' (Property, Field, Variable, Constant, EnumMember), 'container' (File, Module, Namespace, Package), 'other' (Others...)."
+        },
+        "matchMode": {
+          "type": "string",
+          "enum": ["strict", "fuzzy"],
+          "description": "Match mode for symbol search. 'strict' (default) matches only when the simple name or fully qualified name is exactly the same. 'fuzzy' matches when partial match is found."
         },
         "workspacePaths": workspacePathsProperty
       },
       "required": [
-        "name",
+        "symbolName",
         "workspacePaths"
       ],
       "additionalProperties": false,
