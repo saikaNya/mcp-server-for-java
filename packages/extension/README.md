@@ -85,6 +85,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 **非常欢迎大家对插件的问题，bug或新功能建议进行反馈！** 🙇
 
 ## 更新日志
+- **0.0.7** 多根工作区支持
 - **0.0.5** 获取源码时，支持按方法名过滤
 - **0.0.4** 支持获取工作区中存在的全限定名相同但版本不同的类
 - **0.0.3** mcp指令执行在多个工作区自动路由，无需手动切换
@@ -173,6 +174,7 @@ When you cannot find the class, class definition, or specific implementation of 
 **Feedback on issues, bugs, or suggestions for new features is highly welcomed!** 🙇
 
 ## Changelog
+- **0.0.7** Multi-root workspace support
 - **0.0.5** Support filtering by method names when retrieving source code
 - **0.0.4** Support for retrieving classes with the same fully qualified name from multiple versions
 - **0.0.3** MCP commands auto-route to multiple workspaces without manual switching

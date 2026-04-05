@@ -24,6 +24,17 @@ class MCPRelay {
       capabilities: {
         tools: {},
       },
+      instructions: [
+        'This MCP server provides Java language support tools through IDE.',
+        'It can search for Java types (classes, interfaces, enums) and retrieve their source code,',
+        'including project source code, external dependencies, and JDK sources.',
+        '',
+        'Available tools:',
+        '- searchJavaTypes: Search for Java types by name or partial name.',
+        '- getSourceCodeByFQN: Get source code of a Java type by its fully qualified name.',
+        '',
+        'Both tools require a "workspacePaths" parameter — pass the current workspace paths so the server can route requests to the correct VSCode instance.',
+      ].join('\n'),
     });
 
     this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async (_request): Promise<ListToolsResult> => {

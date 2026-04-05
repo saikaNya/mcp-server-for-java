@@ -9,32 +9,24 @@ const workspacePathsProperty = {
 
 export const initialTools = [
   {
-    "name": "searchSymbol",
-    "description": "Searches for symbols (classes, interfaces, enums, methods, functions, variables, etc.) by name across multiple languages.\nThe search scope includes:\n- Project source code\n- External dependencies (libraries and frameworks)\n- JDK source code (for Java)\nReturns results grouped by language with symbol details.",
+    "name": "searchJavaTypes",
+    "description": "search for Java types (classes, enums, and interfaces) by their name or partial name.\nThe search scope includes not only the project's source code but also external dependencies (such as libraries or frameworks) and the JDK.\nThe result will return a list of fully qualified names or uri paths of all matching Java types.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "symbolName": {
+        "name": {
           "type": "string",
-          "description": "The symbol name to search for."
-        },
-        "symbolCategories": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["type", "callable", "data", "container", "other"]
-          },
-          "description": "Filter symbols by category. If not provided, no filtering is applied. Available categories: 'type' (Class, Interface, Enum, Struct), 'callable' (Method, Function, Constructor, Operator), 'data' (Property, Field, Variable, Constant, EnumMember), 'container' (File, Module, Namespace, Package), 'other' (Others...)."
+          "description": "The name or partial name of the Java types (classes, enums, and interfaces) to search for."
         },
         "matchMode": {
           "type": "string",
           "enum": ["strict", "fuzzy"],
-          "description": "Match mode for symbol search. 'strict' (default) matches only when the simple name or fully qualified name is exactly the same. 'fuzzy' matches when partial match is found."
+          "description": "Match mode for search. 'strict' (default) matches only when the simple name or fully qualified name is exactly the same. 'fuzzy' matches when partial match is found."
         },
         "workspacePaths": workspacePathsProperty
       },
       "required": [
-        "symbolName",
+        "name",
         "workspacePaths"
       ],
       "additionalProperties": false,

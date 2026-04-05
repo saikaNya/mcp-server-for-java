@@ -1,6 +1,6 @@
 import * as net from 'net';
 import * as vscode from 'vscode';
-import { searchSymbolTool } from './tools/search_symbol';
+import { searchJavaTypesTool } from './tools/search_symbol';
 import { getSourceCodeByFQNTool } from './tools/get_source_code_by_fqn';
 import { RequestContext, requestContextStorage } from './utils/request-context';
 import { getSocketPath, ensureSocketDir, unregisterByPid, cleanupStaleSocketFile } from './utils/router-table';
@@ -30,7 +30,7 @@ let lastVersionWarningTime = 0;
 
 // Tool name to handler mapping
 const toolHandlers: Record<string, (params: any) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>> = {
-  'searchSymbol': searchSymbolTool,
+  'searchJavaTypes': searchJavaTypesTool,
   'getSourceCodeByFQN': getSourceCodeByFQNTool,
 };
 
@@ -90,7 +90,7 @@ export class SocketServer {
   async start(): Promise<void> {
     // Ensure socket directory exists (Unix only)
     await ensureSocketDir();
-    
+
     // Clean up any stale socket file from previous runs
     await cleanupStaleSocketFile(this.pid);
 
@@ -103,14 +103,14 @@ export class SocketServer {
 
         conn.on('data', async (data) => {
           buffer += data.toString('utf8');
-          
+
           // Try to parse complete JSON messages (separated by newlines)
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
           for (const line of lines) {
             if (!line.trim()) continue;
-            
+
             try {
               const parsed = JSON.parse(line) as JSONRPCRequest;
               await this.handleMessage(parsed, conn);
@@ -270,7 +270,7 @@ export class SocketServer {
 
     if (this.server) {
       this.outputChannel.appendLine('Closing socket server');
-      
+
       return new Promise((resolve) => {
         this.server!.close(async () => {
           // Unregister from router table
@@ -280,10 +280,10 @@ export class SocketServer {
           } catch (err) {
             this.outputChannel.appendLine(`Failed to unregister from router table: ${err}`);
           }
-          
+
           // Clean up socket file (Unix only)
           await cleanupStaleSocketFile(this.pid);
-          
+
           this.server = undefined;
           resolve();
         });

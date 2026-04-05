@@ -27,7 +27,7 @@ export async function sendSocketRequest(
   options?: SocketRequestOptions
 ): Promise<unknown> {
   const socketPath = getSocketPath(pid);
-  
+
   return new Promise((resolve, reject) => {
     const client = net.createConnection(socketPath);
     let buffer = '';
@@ -53,26 +53,26 @@ export async function sendSocketRequest(
 
     client.on('connect', () => {
       clearTimeout(connectionTimer);
-      
+
       // Prepare the message with optional headers
-      const message = options?.headers 
+      const message = options?.headers
         ? { ...body as object, headers: options.headers }
         : body;
-      
+
       // Send the request
       client.write(JSON.stringify(message) + '\n');
     });
 
     client.on('data', (data) => {
       buffer += data.toString('utf8');
-      
+
       // Try to parse complete JSON messages (separated by newlines)
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (!line.trim()) continue;
-        
+
         try {
           const response = JSON.parse(line);
           if (!resolved) {
@@ -99,7 +99,7 @@ export async function sendSocketRequest(
     client.on('close', () => {
       clearTimeout(connectionTimer);
       clearTimeout(requestTimer);
-      
+
       // Try to parse any remaining data in buffer
       if (buffer.trim() && !resolved) {
         try {
@@ -127,10 +127,10 @@ export async function sendSocketRequest(
  */
 export async function isSocketAvailable(pid: number): Promise<boolean> {
   const socketPath = getSocketPath(pid);
-  
+
   return new Promise((resolve) => {
     const client = net.createConnection(socketPath);
-    
+
     const timer = setTimeout(() => {
       client.destroy();
       resolve(false);
