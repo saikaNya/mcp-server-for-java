@@ -88,6 +88,22 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1(webpack@5.98.0)
 
+  packages/multi-ide-relay:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.8.0
+        version: 1.8.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.14.0
+        version: 22.14.0
+      tsx:
+        specifier: ^4.7.0
+        version: 4.19.3
+      typescript:
+        specifier: ^5.8.2
+        version: 5.8.2
+
   packages/relay:
     dependencies:
       '@hono/node-server':
@@ -4693,7 +4709,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.13.17
+      '@types/node': 22.14.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
