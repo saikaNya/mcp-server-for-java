@@ -1,7 +1,9 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 
-export const DEFAULT_IDEA_BASE_URL = 'http://127.0.0.1:63342';
+import { DEFAULT_IDEA_PORT, resolveIdeaBaseUrl } from './idea-host.js';
+
+export { DEFAULT_IDEA_BASE_URL } from './idea-host.js';
 export const IDEA_SEARCH_CLASS_PATH = '/api/language-interface/search-class';
 export const IDEA_CLASS_CONTENT_PATH = '/api/language-interface/class-content';
 
@@ -17,6 +19,7 @@ export interface IdeaTransport {
 
 export interface IdeaClientOptions {
   baseUrl?: string;
+  cliBaseUrl?: string;
   timeoutMs?: number;
   transport?: IdeaTransport;
 }
@@ -50,6 +53,10 @@ class NodeIdeaTransport implements IdeaTransport {
           headers: {
             'Content-Type': 'application/json; charset=utf-8',
             Accept: 'application/json',
+            // Force Host header to localhost so that IDEA's BuiltInServer
+            // origin/host check accepts requests even when the TCP target was
+            // rewritten (e.g. Windows host IP from WSL NAT).
+            Host: `localhost:${url.port || DEFAULT_IDEA_PORT}`,
             'Content-Length': Buffer.byteLength(body),
           },
         },
@@ -121,7 +128,7 @@ export class IdeaClient implements IdeaHttpClientLike {
   private readonly transport: IdeaTransport;
 
   constructor(options: IdeaClientOptions = {}) {
-    this.baseUrl = options.baseUrl || DEFAULT_IDEA_BASE_URL;
+    this.baseUrl = options.baseUrl || resolveIdeaBaseUrl({ cliBaseUrl: options.cliBaseUrl });
     this.timeoutMs = options.timeoutMs ?? 5000;
     this.transport = options.transport || new NodeIdeaTransport();
   }

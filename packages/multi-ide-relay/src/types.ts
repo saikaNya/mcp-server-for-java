@@ -70,6 +70,7 @@ export interface IdeAdapter {
 export interface CliOptions {
   client?: string;
   ides: IdeKind[];
+  ideaBaseUrl?: string;
 }
 
 export function createTextResult(text: string, isError = false): CallToolResult {

@@ -1,10 +1,23 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
 
 import { IdeaAdapter, normalizeIdeaSearchResults } from './idea-adapter.js';
+import {
+  IDEA_SEARCH_CLASS_PATH,
+  IdeaClient,
+  type IdeaTransport,
+} from './idea-client.js';
+import {
+  DEFAULT_IDEA_BASE_URL,
+  getWindowsHostFromGateway,
+  isWsl,
+  resolveIdeaBaseUrl,
+} from './idea-host.js';
 import { buildFallbackErrorMessage, executeWithFallback, parseArgs } from './index.js';
 import { findEntryForWorkspacePath } from './router-table.js';
 import { createTextResult, type IdeAdapter, type IdeKind, type ToolInvocation } from './types.js';
@@ -238,4 +251,219 @@ test('buildFallbackErrorMessage summarizes exhausted fallbacks', () => {
     ]),
     'No configured IDE could handle workspacePath: D:/workspace. idea: timeout; vscode: missing workspace',
   );
+});
+
+test('parseArgs accepts --idea-base-url', () => {
+  assert.deepEqual(parseArgs(['--idea-base-url', 'http://10.0.0.5:63342']), {
+    client: undefined,
+    ides: ['idea'],
+    ideaBaseUrl: 'http://10.0.0.5:63342',
+  });
+});
+
+test('parseArgs rejects --idea-base-url without value', () => {
+  assert.throws(() => parseArgs(['--idea-base-url']), /requires a value/);
+  assert.throws(() => parseArgs(['--idea-base-url', '--client', 'cursor']), /requires a value/);
+});
+
+test('resolveIdeaBaseUrl returns default on non-WSL without config', () => {
+  const resolved = resolveIdeaBaseUrl({
+    env: {},
+    platform: 'linux',
+    readFileSync: () => {
+      throw new Error('no file');
+    },
+  });
+  assert.equal(resolved, DEFAULT_IDEA_BASE_URL);
+});
+
+test('resolveIdeaBaseUrl prefers cliBaseUrl above all', () => {
+  const resolved = resolveIdeaBaseUrl({
+    cliBaseUrl: 'http://cli.example:63342/',
+    env: {
+      IDEA_BASE_URL: 'http://env.example:63342',
+      IDEA_HOST: 'ignored',
+      IDEA_PORT: '1234',
+    },
+    platform: 'linux',
+    readFileSync: (p) => {
+      if (p === '/proc/sys/kernel/osrelease') return 'microsoft-standard-WSL2';
+      if (p === '/proc/net/route') {
+        return [
+          'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT',
+          'eth0\t00000000\t0100A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0',
+        ].join('\n');
+      }
+      throw new Error(`unexpected read: ${p}`);
+    },
+  });
+  assert.equal(resolved, 'http://cli.example:63342');
+});
+
+test('resolveIdeaBaseUrl prefers IDEA_BASE_URL over IDEA_HOST/PORT and auto-detection', () => {
+  const resolved = resolveIdeaBaseUrl({
+    env: {
+      IDEA_BASE_URL: 'http://env.example:7777',
+      IDEA_HOST: 'ignored',
+      IDEA_PORT: '1234',
+    },
+    platform: 'linux',
+    readFileSync: (p) => {
+      if (p === '/proc/sys/kernel/osrelease') return 'microsoft-standard-WSL2';
+      throw new Error(`unexpected read: ${p}`);
+    },
+  });
+  assert.equal(resolved, 'http://env.example:7777');
+});
+
+test('resolveIdeaBaseUrl assembles URL from IDEA_HOST/IDEA_PORT', () => {
+  assert.equal(
+    resolveIdeaBaseUrl({
+      env: { IDEA_HOST: '10.1.2.3' },
+      platform: 'linux',
+      readFileSync: () => {
+        throw new Error('no file');
+      },
+    }),
+    'http://10.1.2.3:63342',
+  );
+
+  assert.equal(
+    resolveIdeaBaseUrl({
+      env: { IDEA_PORT: '9999' },
+      platform: 'linux',
+      readFileSync: () => {
+        throw new Error('no file');
+      },
+    }),
+    'http://127.0.0.1:9999',
+  );
+});
+
+test('resolveIdeaBaseUrl derives Windows gateway IP under WSL', () => {
+  const resolved = resolveIdeaBaseUrl({
+    env: {},
+    platform: 'linux',
+    readFileSync: (p) => {
+      if (p === '/proc/sys/kernel/osrelease') return 'microsoft-standard-WSL2';
+      if (p === '/proc/net/route') {
+        return [
+          'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT',
+          'eth0\t00000000\t0100A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0',
+        ].join('\n');
+      }
+      throw new Error(`unexpected read: ${p}`);
+    },
+  });
+  assert.equal(resolved, 'http://192.168.0.1:63342');
+});
+
+test('resolveIdeaBaseUrl falls back to default when WSL gateway cannot be parsed', () => {
+  const resolved = resolveIdeaBaseUrl({
+    env: { WSL_DISTRO_NAME: 'Ubuntu' },
+    platform: 'linux',
+    readFileSync: (p) => {
+      if (p === '/proc/net/route') {
+        return 'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n';
+      }
+      throw new Error(`unexpected read: ${p}`);
+    },
+  });
+  assert.equal(resolved, DEFAULT_IDEA_BASE_URL);
+});
+
+test('isWsl detects WSL via /proc/version when osrelease is missing', () => {
+  assert.equal(
+    isWsl({
+      env: {},
+      platform: 'linux',
+      readFileSync: (p) => {
+        if (p === '/proc/sys/kernel/osrelease') {
+          throw new Error('missing');
+        }
+        if (p === '/proc/version') {
+          return 'Linux version 5.10.16.3-microsoft-standard-WSL2';
+        }
+        throw new Error(`unexpected read: ${p}`);
+      },
+    }),
+    true,
+  );
+});
+
+test('isWsl returns false on non-linux platforms', () => {
+  assert.equal(
+    isWsl({
+      env: { WSL_DISTRO_NAME: 'Ubuntu' },
+      platform: 'win32',
+      readFileSync: () => {
+        throw new Error('should not read');
+      },
+    }),
+    false,
+  );
+});
+
+test('getWindowsHostFromGateway skips non-default routes', () => {
+  const gateway = getWindowsHostFromGateway({
+    readFileSync: (p) => {
+      if (p === '/proc/net/route') {
+        return [
+          'Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT',
+          'eth0\t0000FEA9\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0',
+          'eth0\t00000000\t0A00A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0',
+        ].join('\n');
+      }
+      throw new Error(`unexpected read: ${p}`);
+    },
+  });
+  assert.equal(gateway, '192.168.0.10');
+});
+
+test('IdeaClient rewrites Host header to localhost when posting over HTTP', async () => {
+  const server = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        code: 0,
+        msg: 'ok',
+        data: { receivedHost: req.headers.host },
+      }),
+    );
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address() as AddressInfo;
+
+  try {
+    const client = new IdeaClient({ baseUrl: `http://127.0.0.1:${address.port}` });
+    const response = await client.postJson<{ receivedHost: string }>(
+      IDEA_SEARCH_CLASS_PATH,
+      { name: 'Foo' },
+    );
+
+    assert.equal(response.code, 0);
+    assert.equal(response.data?.receivedHost, `localhost:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
+test('IdeaClient.postJson forwards body and path to transport', async () => {
+  let captured: { url: URL; body: string } | undefined;
+  const transport: IdeaTransport = {
+    async postJson(url, body) {
+      captured = { url, body };
+      return { code: 0, msg: 'ok', data: null };
+    },
+  };
+
+  const client = new IdeaClient({ baseUrl: 'http://example:63342', transport });
+  await client.postJson('/api/language-interface/search-class', { name: 'Foo' });
+
+  assert.ok(captured);
+  assert.equal(captured?.url.href, 'http://example:63342/api/language-interface/search-class');
+  assert.equal(captured?.body, JSON.stringify({ name: 'Foo' }));
 });

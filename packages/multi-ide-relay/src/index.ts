@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -12,6 +13,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { IdeaAdapter } from './idea-adapter.js';
+import { IdeaClient } from './idea-client.js';
 import { initialTools } from './initial_tools.js';
 import {
   createTextResult,
@@ -66,6 +68,7 @@ function parseIdeToken(token: string): IdeKind[] {
 export function parseArgs(argv: string[]): CliOptions {
   const ides: IdeKind[] = [];
   let client: string | undefined;
+  let ideaBaseUrl: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const current = argv[index];
@@ -76,6 +79,16 @@ export function parseArgs(argv: string[]): CliOptions {
         throw new Error('--client requires a value.');
       }
       client = next;
+      index += 1;
+      continue;
+    }
+
+    if (current === '--idea-base-url') {
+      const next = argv[index + 1];
+      if (!next || next.startsWith('--')) {
+        throw new Error('--idea-base-url requires a value.');
+      }
+      ideaBaseUrl = next;
       index += 1;
       continue;
     }
@@ -99,6 +112,7 @@ export function parseArgs(argv: string[]): CliOptions {
   return {
     client,
     ides: ides.length > 0 ? ides : ['idea'],
+    ...(ideaBaseUrl !== undefined ? { ideaBaseUrl } : {}),
   };
 }
 
@@ -242,7 +256,9 @@ export class McpServerForLanguage {
     adapters?: Partial<Record<IdeKind, IdeAdapter>>,
   ) {
     this.adapters = {
-      idea: adapters?.idea || new IdeaAdapter(),
+      idea:
+        adapters?.idea
+        || new IdeaAdapter(new IdeaClient({ cliBaseUrl: options.ideaBaseUrl })),
       vscode: adapters?.vscode || new VSCodeAdapter(),
     };
 
@@ -301,7 +317,27 @@ async function main(): Promise<void> {
   await server.start();
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) {
+    return false;
+  }
+
+  try {
+    // Resolve symlinks so that `npm install -g` installs (which expose a
+    // symlink in `bin/`) still match the real module path.
+    const resolvedEntry = realpathSync(entry);
+    if (import.meta.url === pathToFileURL(resolvedEntry).href) {
+      return true;
+    }
+  } catch {
+    // Fall through to the non-resolved comparison below.
+  }
+
+  return import.meta.url === pathToFileURL(entry).href;
+}
+
+if (isMainModule()) {
   try {
     await main();
   } catch (error) {
