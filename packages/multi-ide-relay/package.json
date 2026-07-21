@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-for-language",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Multi-IDE MCP server for IntelliJ IDEA and VSCode",
   "main": "dist/index.js",
   "bin": {
