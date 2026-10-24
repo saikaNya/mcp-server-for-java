@@ -1,7 +1,12 @@
 import * as vscode from 'vscode';
 import { debug } from './logger';
 
-const JAVA_EXTENSION_ID = 'redhat.java';
+const RED_HAT_JAVA_EXTENSION_ID = 'redhat.java';
+const INTELLIJ_JAVA_EXTENSION_ID = 'JetBrains.intellij-server';
+const JAVA_EXTENSION_IDS = [
+    RED_HAT_JAVA_EXTENSION_ID,
+    INTELLIJ_JAVA_EXTENSION_ID
+] as const;
 const MAX_WAIT_TIME_MS = 15000; // 最长等待 15 秒
 const CHECK_INTERVAL_MS = 1000; // 每隔 1 秒检测一次
 
@@ -25,8 +30,9 @@ enum LspStatus {
  * 检查 Java Language Server 是否已安装
  */
 export function isJavaExtensionInstalled(): boolean {
-    const javaExtension = vscode.extensions.getExtension(JAVA_EXTENSION_ID);
-    return javaExtension !== undefined;
+    return JAVA_EXTENSION_IDS.some(extensionId =>
+        vscode.extensions.getExtension(extensionId) !== undefined
+    );
 }
 
 /**
@@ -34,64 +40,83 @@ export function isJavaExtensionInstalled(): boolean {
  */
 async function getJavaLspStatus(): Promise<LspStatus> {
     try {
-        const javaExtension = vscode.extensions.getExtension(JAVA_EXTENSION_ID);
+        const redHatExtension = vscode.extensions.getExtension(RED_HAT_JAVA_EXTENSION_ID);
+        const intellijExtension = vscode.extensions.getExtension(INTELLIJ_JAVA_EXTENSION_ID);
+        const installedExtensions = [redHatExtension, intellijExtension].filter(
+            (extension): extension is vscode.Extension<unknown> => extension !== undefined
+        );
 
         // 1. 第一步：物理检查插件是否存在
-        if (!javaExtension) {
+        if (installedExtensions.length === 0) {
             return LspStatus.NOT_INSTALLED;
         }
 
         // 2. 第二步：检查插件是否已激活
         // 如果 isActive 为 false，说明插件没启动，LSP 肯定没就绪
-        if (!javaExtension.isActive) {
+        if (!installedExtensions.some(extension => extension.isActive)) {
             return LspStatus.NOT_ACTIVATED;
         }
 
-        // 3. 第三步：插件既然已经激活，获取 API 就是零开销的
-        // 此时调用 .exports 不会触发额外的启动过程
-        const api = javaExtension.exports;
-
-        // 4. 检查具体的 Server Mode
-        // 优先使用 API 的 serverMode 属性（如果存在）
-        if (api && api.serverMode !== undefined && api.serverMode !== null) {
-            const mode = String(api.serverMode).toLowerCase();
-            debug(`Java LSP serverMode from API: ${mode}`);
-
-            // Standard 和 Hybrid 模式下完全支持 workspace symbol
-            if (mode === 'standard' || mode === 'hybrid') {
+        // Java and Kotlin by IntelliJ IDEA 不公开 LSP 状态 API。
+        // 插件激活后，通过 workspace symbol 请求确认 Language Server 已开始提供服务。
+        if (intellijExtension?.isActive) {
+            const intellijStatus = await checkLspReadyByWorkspaceSymbol(true);
+            debug(`IntelliJ Java LSP status: ${intellijStatus}`);
+            if (intellijStatus === LspStatus.READY) {
                 return LspStatus.READY;
             }
-
-            // 其他模式（LightWeight, Syntax 等）表示正在启动中
-            return LspStatus.STARTING;
         }
 
-        // 5. 备用方法：通过命令检查服务器模式
-        try {
-            const serverMode = await vscode.commands.executeCommand<string>('java.server.launchMode');
+        if (redHatExtension?.isActive) {
+            // 3. 第三步：插件既然已经激活，获取 API 就是零开销的
+            // 此时调用 .exports 不会触发额外的启动过程
+            const api = redHatExtension.exports;
 
-            // serverMode 为 null/undefined/空字符串 表示 LSP 未启动
-            if (serverMode === null || serverMode === undefined || serverMode === '') {
-                // 尝试备用检测方法
+            // 4. 检查具体的 Server Mode
+            // 优先使用 API 的 serverMode 属性（如果存在）
+            if (api && api.serverMode !== undefined && api.serverMode !== null) {
+                const mode = String(api.serverMode).toLowerCase();
+                debug(`Red Hat Java LSP serverMode from API: ${mode}`);
+
+                // Standard 和 Hybrid 模式下完全支持 workspace symbol
+                if (mode === 'standard' || mode === 'hybrid') {
+                    return LspStatus.READY;
+                }
+
+                // 其他模式（LightWeight, Syntax 等）表示正在启动中
+                return LspStatus.STARTING;
+            }
+
+            // 5. 备用方法：通过命令检查服务器模式
+            try {
+                const serverMode = await vscode.commands.executeCommand<string>('java.server.launchMode');
+
+                // serverMode 为 null/undefined/空字符串 表示 LSP 未启动
+                if (serverMode === null || serverMode === undefined || serverMode === '') {
+                    // 尝试备用检测方法
+                    return await checkLspReadyByWorkspaceSymbol();
+                }
+
+                // serverMode 可能是 'Standard', 'LightWeight', 'Syntax', 'Hybrid' 等（不区分大小写）
+                const mode = String(serverMode).toLowerCase();
+                debug(`Red Hat Java LSP serverMode from command: ${mode}`);
+
+                // Standard 和 Hybrid 模式下完全支持 workspace symbol
+                if (mode === 'standard' || mode === 'hybrid') {
+                    return LspStatus.READY;
+                }
+
+                // 其他模式（LightWeight, Syntax 等）表示正在启动中
+                return LspStatus.STARTING;
+            } catch (cmdError) {
+                debug(`java.server.launchMode command failed: ${cmdError}, trying fallback detection`);
+                // 命令失败时尝试备用检测方法
                 return await checkLspReadyByWorkspaceSymbol();
             }
-
-            // serverMode 可能是 'Standard', 'LightWeight', 'Syntax', 'Hybrid' 等（不区分大小写）
-            const mode = String(serverMode).toLowerCase();
-            debug(`Java LSP serverMode from command: ${mode}`);
-
-            // Standard 和 Hybrid 模式下完全支持 workspace symbol
-            if (mode === 'standard' || mode === 'hybrid') {
-                return LspStatus.READY;
-            }
-
-            // 其他模式（LightWeight, Syntax 等）表示正在启动中
-            return LspStatus.STARTING;
-        } catch (cmdError) {
-            debug(`java.server.launchMode command failed: ${cmdError}, trying fallback detection`);
-            // 命令失败时尝试备用检测方法
-            return await checkLspReadyByWorkspaceSymbol();
         }
+
+        // IntelliJ 插件已激活但暂时还不能返回符号，通常表示项目仍在导入或建立索引。
+        return LspStatus.STARTING;
     } catch (error) {
         debug(`getJavaLspStatus error: ${error}`);
         return LspStatus.NOT_STARTED;
@@ -101,7 +126,7 @@ async function getJavaLspStatus(): Promise<LspStatus> {
 /**
  * 备用检测方法：通过执行 workspace symbol 查询来检测 LSP 是否就绪
  */
-async function checkLspReadyByWorkspaceSymbol(): Promise<LspStatus> {
+async function checkLspReadyByWorkspaceSymbol(requireResults = false): Promise<LspStatus> {
     try {
         // 尝试执行一个简单的 workspace symbol 查询
         const symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
@@ -109,12 +134,14 @@ async function checkLspReadyByWorkspaceSymbol(): Promise<LspStatus> {
             'Object' // 使用一个常见的类名进行测试
         );
 
-        // 如果命令成功执行（无论是否有结果），说明 LSP 已就绪
-        if (symbols !== undefined) {
+        // Red Hat 保持原有行为：命令能执行即视为就绪。
+        // IntelliJ 插件没有公开状态 API，因此需要至少返回一个常见 JDK 类型，
+        // 避免在没有任何 workspace symbol provider 时把空数组误判为就绪。
+        if (symbols !== undefined && (!requireResults || symbols.length > 0)) {
             return LspStatus.READY;
         }
 
-        return LspStatus.NOT_STARTED;
+        return requireResults ? LspStatus.STARTING : LspStatus.NOT_STARTED;
     } catch (error) {
         debug(`Fallback detection failed: ${error}`);
         return LspStatus.NOT_STARTED;
@@ -127,7 +154,7 @@ async function checkLspReadyByWorkspaceSymbol(): Promise<LspStatus> {
 function getErrorMessageForStatus(status: LspStatus): string {
     switch (status) {
         case LspStatus.NOT_INSTALLED:
-            return `Java Language Server extension (${JAVA_EXTENSION_ID}) is not installed. Please install the "Language Support for Java(TM) by Red Hat" extension from the VS Code marketplace.`;
+            return `No supported Java Language Server extension is installed. Please install "Language Support for Java(TM) by Red Hat" (${RED_HAT_JAVA_EXTENSION_ID}) or "Java and Kotlin by IntelliJ IDEA" (${INTELLIJ_JAVA_EXTENSION_ID}) from the extension marketplace.`;
         case LspStatus.NOT_ACTIVATED:
             return `Java Language Server extension is installed but failed to activate. Please try reloading the VS Code window.`;
         case LspStatus.NOT_STARTED:
