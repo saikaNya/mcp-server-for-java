@@ -43,7 +43,10 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 
 ## 首次安装与设置
 
-1. 确认已经安装插件`Extension Pack for Java`[微软插件商品版本](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack)或[Open VSX 版本](https://open-vsx.org/extension/vscjava/vscode-java-pack) 且可正常运行java项目
+1. 安装以下任意一种 Java Language Server 插件，并确保它可以正常运行 Java 项目（建议只启用一种，以免语言功能冲突）：
+
+    - `Extension Pack for Java`：[微软插件市场](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) / [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)
+    - `Java and Kotlin by IntelliJ IDEA`：[微软插件市场](https://marketplace.visualstudio.com/items?itemName=JetBrains.intellij-server) / [Open VSX](https://open-vsx.org/extension/JetBrains/intellij-server)
 
 2. 下载安装本插件。
 
@@ -64,8 +67,15 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
     }
     ```
 
-4. 打开一个java项目，并确保项目完全加载完毕
-![项目完全加载完毕](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+4. 打开一个 Java 项目，等待项目导入、依赖解析和索引完成，并确认 Java Language Server 已就绪：
+
+    - 使用 `Extension Pack for Java` 时，状态栏中的 Java 项目加载状态应显示为已完成：
+
+      ![Extension Pack for Java 已就绪](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+
+    - 使用 `Java and Kotlin by IntelliJ IDEA` 时，点击状态栏中的 **Java and Kotlin**，状态菜单应显示 **Running**；正式版还应显示许可证已激活：
+
+      ![Java and Kotlin by IntelliJ IDEA 已就绪](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/intellijLspReady.png)
 
 ## 提高工具调用率（推荐配置）
 为了让 AI Agent 更主动地调用本插件提供的工具，建议在系统提示词中添加以下内容（如果你没有更好或者更适合自己应用场景的提示词）：
@@ -85,6 +95,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 **非常欢迎大家对插件的问题，bug或新功能建议进行反馈！** 🙇
 
 ## 更新日志
+- **0.0.8** 兼容 Java and Kotlin by IntelliJ IDEA 插件
 - **0.0.7** 多根工作区支持
 - **0.0.5** 获取源码时，支持按方法名过滤
 - **0.0.4** 支持获取工作区中存在的全限定名相同但版本不同的类
@@ -262,7 +273,10 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
 
 ## Installation & Setup
 
-1. Confirm that the `Extension Pack for Java` plugin is installed ([VS Marketplace](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) or [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)) and can run Java projects normally
+1. Install either of the following Java Language Server extensions and make sure it can run Java projects normally (enable only one to avoid conflicting language features):
+
+    - `Extension Pack for Java`: [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) / [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)
+    - `Java and Kotlin by IntelliJ IDEA`: [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=JetBrains.intellij-server) / [Open VSX](https://open-vsx.org/extension/JetBrains/intellij-server)
 
 2. Download and install this extension.
 
@@ -283,8 +297,15 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
     }
     ```
 
-4. Open a Java project and make sure the project is fully loaded
-![Project fully loaded](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+4. Open a Java project, wait for project import, dependency resolution, and indexing to finish, and verify that the Java Language Server is ready:
+
+    - With `Extension Pack for Java`, the Java project loading status in the status bar should show that loading is complete:
+
+      ![Extension Pack for Java ready](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+
+    - With `Java and Kotlin by IntelliJ IDEA`, click **Java and Kotlin** in the status bar and verify that its status menu displays **Running**. Stable releases should also show an active license:
+
+      ![Java and Kotlin by IntelliJ IDEA ready](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/intellijLspReady.png)
 
 ## Improve Tool Invocation Rate (Recommended Configuration)
 To help AI Agents invoke the tools provided by this extension more proactively, it is recommended to add the following content to your system prompt (if you don't have a better or more suitable prompt for your use case):
@@ -304,6 +325,7 @@ When you cannot find the class, class definition, or specific implementation of 
 **Feedback on issues, bugs, or suggestions for new features is highly welcomed!** 🙇
 
 ## Changelog
+- **0.0.8** Add compatibility with the Java and Kotlin by IntelliJ IDEA extension
 - **0.0.7** Multi-root workspace support
 - **0.0.5** Support filtering by method names when retrieving source code
 - **0.0.4** Support for retrieving classes with the same fully qualified name from multiple versions

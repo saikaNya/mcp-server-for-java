@@ -29,7 +29,7 @@
 > 如果不修改配置，将无法自动在多工作区间切换，只能获取第一个打开的工作区的类。
 
 ## 简介
-Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在编写 Java 项目时，可以访问项目本身的源代码，但**无法获取项目依赖的类定义与源码**。
+AI Code Agent 在写 Java 项目时，可以访问项目本身的源代码，但**无法获取项目依赖的类定义与源码**。导致 AI Code Agent 生成依赖包中方法时，参数出错，类型出错等。或其他不知道依赖包或 JDK 源代码导致的其他幻觉瞎编问题。
 
 本插件将 VSCode/Cursor 转变为 MCP 服务器，让 AI Agent 能够：
 - **搜索 Java 类型**：通过名称或部分名称在项目、外部依赖和 JDK 中搜索类 ————对应mcp工具`searchJavaTypes`
@@ -43,13 +43,18 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 
 ## 首次安装与设置
 
-1. 确认已经安装插件`Extension Pack for Java`[微软插件商品版本](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack)或[Open VSX 版本](https://open-vsx.org/extension/vscjava/vscode-java-pack) 且可正常运行java项目
+1. 安装以下任意一种 Java Language Server 插件，并确保它可以正常运行 Java 项目（建议只启用一种，以免语言功能冲突）：
+
+    - `Extension Pack for Java`：[微软插件市场](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) / [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)
+    - `Java and Kotlin by IntelliJ IDEA`：[微软插件市场](https://marketplace.visualstudio.com/items?itemName=JetBrains.intellij-server) / [Open VSX](https://open-vsx.org/extension/JetBrains/intellij-server)
 
 2. 下载安装本插件。
 
-3. 配置您的MCP客户端，重启并确认mcp工具加载完成：
+3. 配置您的 MCP 客户端，重启并确认 MCP 工具加载完成。
 
-    - **如Claude Desktop，Curosr，Winsurf，Vsocde，Cherry studio等客户端**：添加以下内容到您的配置文件(`claude_desktop_config.json`)中：
+    **仅使用 VSCode / Cursor / Windsurf 等 VSCode 系 IDE：**
+
+    将以下内容添加到 Claude Desktop、Cursor、Windsurf、VSCode、Cherry Studio 等客户端的 MCP 配置文件（如 `claude_desktop_config.json`）中：
 
     ```json
     {
@@ -64,15 +69,55 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
     }
     ```
 
-4. 打开一个java项目，并确保项目完全加载完毕
-![项目完全加载完毕](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+    **兼容 IntelliJ IDEA 和 VSCode 系 IDE：**
+
+    如果平时会分别使用 IntelliJ IDEA 和 VSCode 系 IDE，并希望 MCP 根据目标项目自动选择可用的 IDE：
+
+    1. 在 VSCode 系 IDE 中保留本插件并完成上述 Java Language Server 设置。
+    2. 在 IntelliJ IDEA 中安装 `Language Interface` 插件并重启 IDEA，可任选以下方式：
+       - **插件商店安装（推荐）**：打开 <kbd>Settings/Preferences</kbd> → <kbd>Plugins</kbd> → <kbd>Marketplace</kbd>，搜索 `Language Interface` 并点击安装。
+       - **本地安装**：从 [GitHub Releases](https://github.com/saikaNya/language-interface/releases/latest) 下载插件 ZIP，然后通过 <kbd>Settings/Preferences</kbd> → <kbd>Plugins</kbd> → <kbd>⚙️</kbd> → <kbd>Install Plugin from Disk...</kbd> 选择 ZIP 安装。
+    3. 使用下面的多 IDE 配置替换前面的 `vscode-to-mcp-server` 配置（不要同时配置两者，以免 MCP 工具重复）：
+
+    ```json
+    {
+      "mcpServers": {
+        "java-ides": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "mcp-server-for-language",
+            "--ides",
+            "idea",
+            "vscode"
+          ]
+        }
+      }
+    }
+    ```
+
+    `--ides` 后面的参数顺序就是 IDE 的优先级和降级顺序，服务会从左到右依次尝试：
+
+    - `--ides idea vscode`：优先使用 IntelliJ IDEA，IDEA 不可用或没有打开目标项目时降级到 VSCode 系 IDE。
+    - `--ides vscode idea`：优先使用 VSCode 系 IDE，无法处理目标项目时再降级到 IntelliJ IDEA。
+
+    调用工具时，`workspacePath` 应与目标 IDE 中打开的项目根目录一致。
+
+4. 打开一个 Java 项目，等待项目导入、依赖解析和索引完成，并确认 Java Language Server 已就绪：
+
+    - 使用 `Extension Pack for Java` 时，状态栏中的 Java 项目加载状态应显示为已完成：
+
+      ![Extension Pack for Java 已就绪](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+
+    - 使用 `Java and Kotlin by IntelliJ IDEA` 时，点击状态栏中的 **Java and Kotlin**，状态菜单应显示 **Running**；正式版还应显示许可证已激活：
+
+      ![Java and Kotlin by IntelliJ IDEA 已就绪](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/intellijLspReady.png)
 
 ## 提高工具调用率（推荐配置）
 为了让 AI Agent 更主动地调用本插件提供的工具，建议在系统提示词中添加以下内容（如果你没有更好或者更适合自己应用场景的提示词）：
 ```txt
 通过项目源代码找不到的类或类的定义或方法具体实现，且有类名或者部分类名时，可以使用工具 searchJavaTypes 与 getSourceCodeByFQN 判断其是否存在，或获取其源代码
 ```
-> 💡 以 Cursor 为例，可以在 **Settings → General → Rules for AI → User Rules** 中添加
 
 ## 插件参数声明
 
@@ -85,6 +130,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 **非常欢迎大家对插件的问题，bug或新功能建议进行反馈！** 🙇
 
 ## 更新日志
+- **0.0.8** 兼容 Java and Kotlin by IntelliJ IDEA 插件
 - **0.0.7** 多根工作区支持
 - **0.0.5** 获取源码时，支持按方法名过滤
 - **0.0.4** 支持获取工作区中存在的全限定名相同但版本不同的类
@@ -118,7 +164,7 @@ Cursor、Github Copilot、Windsurf 等基于 VSCode 开发的 AI Code Agent 在�
 > Without updating the configuration, automatic multi-workspace switching will not work, and only classes from the first opened workspace will be accessible.
 
 ## Overview
-AI Code Agents based on VSCode (such as Cursor, Github Copilot, Windsurf) can access a Java project's own source code, but **cannot retrieve class definitions and source code from project dependencies**.
+When working on Java projects, AI Code Agents can access the project's own source code, but **cannot retrieve class definitions and source code from project dependencies**. As a result, generated calls to dependency APIs may use incorrect argument counts or types, while the lack of visibility into dependency and JDK source code can lead to other hallucinated classes, methods, or fields.
 
 This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
 - **Search Java Types**: Search for classes by name or partial name across your project, external dependencies, and JDK — corresponding MCP tool `searchJavaTypes`
@@ -132,13 +178,18 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
 
 ## Installation & Setup
 
-1. Confirm that the `Extension Pack for Java` plugin is installed ([VS Marketplace](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) or [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)) and can run Java projects normally
+1. Install either of the following Java Language Server extensions and make sure it can run Java projects normally (enable only one to avoid conflicting language features):
+
+    - `Extension Pack for Java`: [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) / [Open VSX](https://open-vsx.org/extension/vscjava/vscode-java-pack)
+    - `Java and Kotlin by IntelliJ IDEA`: [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=JetBrains.intellij-server) / [Open VSX](https://open-vsx.org/extension/JetBrains/intellij-server)
 
 2. Download and install this extension.
 
-3. Configure your MCP client, restart and confirm MCP tools are loaded:
+3. Configure your MCP client, restart it, and confirm that the MCP tools are loaded.
 
-    - **For clients like Claude Desktop, Cursor, Winsurf, VSCode, Cherry studio**: Add the following to your configuration file (`claude_desktop_config.json`):
+    **Use VSCode-based IDEs only (VSCode, Cursor, Windsurf, and similar IDEs):**
+
+    Add the following to the MCP configuration file (such as `claude_desktop_config.json`) of Claude Desktop, Cursor, Windsurf, VSCode, Cherry Studio, or another client:
 
     ```json
     {
@@ -153,15 +204,55 @@ This extension turns VSCode/Cursor into an MCP server, enabling AI Agents to:
     }
     ```
 
-4. Open a Java project and make sure the project is fully loaded
-![Project fully loaded](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+    **Use both IntelliJ IDEA and VSCode-based IDEs:**
+
+    If you use IntelliJ IDEA and VSCode-based IDEs separately and want MCP to select an available IDE for the target project automatically:
+
+    1. Keep this extension installed in the VSCode-based IDE and complete the Java Language Server setup above.
+    2. Install the `Language Interface` plugin in IntelliJ IDEA using either method below, then restart IDEA:
+       - **Marketplace (recommended)**: Open <kbd>Settings/Preferences</kbd> → <kbd>Plugins</kbd> → <kbd>Marketplace</kbd>, search for `Language Interface`, and install it.
+       - **Install from disk**: Download the plugin ZIP from [GitHub Releases](https://github.com/saikaNya/language-interface/releases/latest), then open <kbd>Settings/Preferences</kbd> → <kbd>Plugins</kbd> → <kbd>⚙️</kbd> → <kbd>Install Plugin from Disk...</kbd> and select the ZIP.
+    3. Replace the preceding `vscode-to-mcp-server` configuration with the multi-IDE configuration below. Do not configure both servers, or the MCP tools will be duplicated.
+
+    ```json
+    {
+      "mcpServers": {
+        "java-ides": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "mcp-server-for-language",
+            "--ides",
+            "idea",
+            "vscode"
+          ]
+        }
+      }
+    }
+    ```
+
+    The arguments after `--ides` define both IDE priority and fallback order. The server tries them from left to right:
+
+    - `--ides idea vscode`: Prefer IntelliJ IDEA and fall back to a VSCode-based IDE when IDEA is unavailable or has not opened the target project.
+    - `--ides vscode idea`: Prefer a VSCode-based IDE and fall back to IntelliJ IDEA when VSCode cannot handle the target project.
+
+    The `workspacePath` passed to a tool should match the project root open in the target IDE.
+
+4. Open a Java project, wait for project import, dependency resolution, and indexing to finish, and verify that the Java Language Server is ready:
+
+    - With `Extension Pack for Java`, the Java project loading status in the status bar should show that loading is complete:
+
+      ![Extension Pack for Java ready](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/envReady.png)
+
+    - With `Java and Kotlin by IntelliJ IDEA`, click **Java and Kotlin** in the status bar and verify that its status menu displays **Running**. Stable releases should also show an active license:
+
+      ![Java and Kotlin by IntelliJ IDEA ready](https://raw.githubusercontent.com/saikaNya/mcp-server-for-java/refs/heads/main/images/intellijLspReady.png)
 
 ## Improve Tool Invocation Rate (Recommended Configuration)
 To help AI Agents invoke the tools provided by this extension more proactively, it is recommended to add the following content to your system prompt (if you don't have a better or more suitable prompt for your use case):
 ```txt
 When you cannot find the class, class definition, or specific implementation of methods through the project source code, and you have the class name or partial class name, you can use the tools searchJavaTypes and getSourceCodeByFQN to check if it exists or get its source code
 ```
-> 💡 For example, in Cursor, you can add this in **Settings → General → Rules for AI → User Rules**
 
 ## Extension Parameters
 
@@ -174,6 +265,7 @@ When you cannot find the class, class definition, or specific implementation of 
 **Feedback on issues, bugs, or suggestions for new features is highly welcomed!** 🙇
 
 ## Changelog
+- **0.0.8** Add compatibility with the Java and Kotlin by IntelliJ IDEA extension
 - **0.0.7** Multi-root workspace support
 - **0.0.5** Support filtering by method names when retrieving source code
 - **0.0.4** Support for retrieving classes with the same fully qualified name from multiple versions
